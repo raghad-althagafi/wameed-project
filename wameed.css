@@ -1,24 +1,54 @@
 /* fonts */
 @font-face {
     font-family: 'YearOfTheCamel';
-    src: url("font/The Year of The Camel/TheYearofTheCamel-ExtraBold.oft") format("opentype");
+    src: url("fonts/The Year of The Camel/TheYearofTheCamel-ExtraBold.otf") format("opentype");
     font-weight: 800;
 }
 
 @font-face {
     font-family: 'YearOfTheCamel';
-    src: url("font/The Year of The Camel/TheYearofTheCamel-Regular.otf") format("opentype");
+    src: url("fonts/The Year of The Camel/TheYearofTheCamel-Regular.otf") format("opentype");
     font-weight: 400;
 }
 
 @font-face {
     font-family: 'YearOfTheCamel';
-    src: url("font/The Year of The Camel/TheYearofTheCamel-Medium.otf") format("opentype");
+    src: url("fonts/The Year of The Camel/TheYearofTheCamel-Medium.otf") format("opentype");
     font-weight: 500;
 }
 
 @font-face {
     font-family: 'YearOfTheCamel';
-    src: url("font/The Year of The Camel/TheYearofTheCamel-Bold.otf") format("opentype");
+    src: url("fonts/The Year of The Camel/TheYearofTheCamel-Bold.otf") format("opentype");
     font-weight: 700;
+}
+
+/* main colors */
+body{
+    background-color: #ffffff;
+    color: black;
+}
+
+/* main button */
+.main-button {
+    background-color: #EC5A2F;
+    color: #ffffff;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 30px;
+    font-family: 'YearOfTheCamel', sans-serif;
+    font-weight: 700;
+    cursor: pointer;
+    transition: 
+        background-color 0.25s ease,
+        box-shadow 0.25s ease,
+        transform 0.15s ease;
+}
+.main-button:hover {
+    background-color: #FB7047;
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.18); /* x-axis, y-axis, blur, color */
+    transform: translateY(-1px); 
+}
+.main-button:active {
+    transform: scale(0.97); /* smaller */
 }
