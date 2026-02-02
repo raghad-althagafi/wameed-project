@@ -1,37 +1,59 @@
 /* fonts */
 @font-face {
     font-family: 'YearOfTheCamel';
-    src: url("fonts/The Year of The Camel/TheYearofTheCamel-ExtraBold.otf") format("opentype");
+    src: url("fonts/The Year of The Camel/The Year of The Camel/TheYearofTheCamel-ExtraBold.otf") format("opentype");
     font-weight: 800;
 }
 
 @font-face {
     font-family: 'YearOfTheCamel';
-    src: url("fonts/The Year of The Camel/TheYearofTheCamel-Regular.otf") format("opentype");
+    src: url("fonts/The Year of The Camel/The Year of The Camel/TheYearofTheCamel-Regular.otf") format("opentype");
     font-weight: 400;
 }
 
 @font-face {
     font-family: 'YearOfTheCamel';
-    src: url("fonts/The Year of The Camel/TheYearofTheCamel-Medium.otf") format("opentype");
+    src: url("fonts/The Year of The Camel/The Year of The Camel/TheYearofTheCamel-Medium.otf") format("opentype");
     font-weight: 500;
 }
 
 @font-face {
     font-family: 'YearOfTheCamel';
-    src: url("fonts/The Year of The Camel/TheYearofTheCamel-Bold.otf") format("opentype");
+    src: url("fonts/The Year of The Camel/The Year of The Camel/TheYearofTheCamel-Bold.otf") format("opentype");
     font-weight: 700;
 }
 
-/* main colors */
+
+* {
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    /* colors*/
+    --primary-color: #EC5A2F;
+    --secondary-color: #7BA697;
+    --gray: #666666;
+    
+    
+    /* spaces */
+    --spacing-sm: 1rem; 
+
+    /* fonts */
+    --font-main: 'YearOfTheCamel', 'Segoe UI', Tahoma, sans-serif;
+
+}
+
+/* main colors and fonts*/
 body{
     background-color: #ffffff;
     color: black;
+    font-family: var(--font-main);
 }
 
 /* main button */
 .main-button {
-    background-color: #EC5A2F;
+    background-color:var(--primary-color);
     color: #ffffff;
     border: none;
     padding: 10px 24px;
@@ -51,4 +73,127 @@ body{
 }
 .main-button:active {
     transform: scale(0.97); /* smaller */
+}
+
+/* footer */
+.footer {
+   background-color: var(--secondary-color);
+    padding: var(--spacing-sm) 0;
+    
+}
+
+.footer-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+ }
+
+
+.copyright {
+    font-size: 1.3rem;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.9);
+    text-align: center;
+}
+
+/* header image */
+.header-image {
+    height: 270px;       
+    background: url("images/Header image.png") center / cover no-repeat;
+}
+
+/* navbar */
+.nav-container {
+    max-width: 1300px; 
+    margin: 0 auto;
+    padding: 0 2rem;
+}
+
+.navbar {
+    background:white; 
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    position: sticky;
+    top: 0;
+    z-index: 1000;    
+}
+
+.nav-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.nav-links {
+    display: flex;
+    list-style: none;
+    gap: 2rem;
+    margin: 0;
+}
+
+.nav-link {
+    text-decoration: none;
+    color: #666666;
+    font-weight: 800;
+    font-size: 1.2rem;
+    padding: 0.5rem 0;
+    position: relative;
+    transition: color 0.2s ease;
+}
+
+/* change color */
+.nav-link:hover,
+.nav-link.active {
+    color: var(--primary-color);
+}
+
+/* Create an underline */
+.nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 0;
+    height: 2px;
+    background-color: var(--primary-color);
+    transition: width 0.2s ease;
+}
+
+/* Expand the underline */
+.nav-link:hover::after,
+.nav-link.active::after {
+    width: 100%;
+}
+
+
+
+/* login and sign up buttons*/
+.nav-buttons {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.btn-login {
+    background-color: transparent;
+    color: var(--primary-color);
+    border: 2px solid var(--primary-color);
+}
+
+.btn-login:hover {
+    background-color: var(--primary-color);
+    color: white;
+    transform: translateY(-2px);
+}
+
+.btn-signup {
+    color: white;
+}
+
+.btn-signup:hover {
+    background-color: #d14d28;
+    transform: translateY(-2px);
+}
+
+.nav-buttons > .main-button {
+    font-size: 1rem;
+    
 }
