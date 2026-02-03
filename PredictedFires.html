@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl"> <!-- the language of the page and the direction of text -->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- the width of page match the width of the device, initial scale of page when its loading -->
+    <title>التنبؤ بالحرائق - وميض</title> <!-- title of page -->
+    <link rel="stylesheet" href="wameed.css"> <!-- import shared css file -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" /> <!-- import library for interactive maps -->
+    <style>
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        .container {
+            display: flex; /* make elements beside others*/
+            flex-direction: row-reverse; /* direction from right to left */
+            padding: 40px;
+            gap: 40px; /* gap between elements */
+            max-width: 1400px; /* maximum width for container */
+            margin: 0 auto; /* align the container to center */
+        }
+
+        .left-section {
+            width: 450px;
+            display: flex; /* make elements beside others*/
+            flex-direction: column; /* elements ordered in a column */
+            gap: 20px; /* gap between elements */
+        }
+
+        .right-section {
+            flex: 1; /* take the rest of space */
+            padding: 40px;
+        }
+
+        h1 {
+            text-align: right;
+            font-size: 40px;
+            margin-bottom: 10px; /* space below the h1 */
+            color: black;
+            font-family: 'YearOfTheCamel', sans-serif;
+            font-weight: bolder;
+        }
+
+        .subtitle {
+            text-align: right;
+            color: #666;
+            font-size: 20px;
+            margin-bottom: 30px; /* space below the subtitle */
+            font-family: 'YearOfTheCamel', sans-serif;
+        }
+
+        .map-button {
+        width: 50%; /* the width is 50% of the container width */
+        font-size: 17px;
+        display: block;
+        margin: 0 auto; /* align the map button to center */
+        }
+
+        .map-container {
+            width: 100%; /* the width is 100% of the left section width */
+            height: 450px;
+            border-radius: 10px;
+            overflow: hidden; /* hide the overflow of the map */
+        }
+
+        #map {
+            width: 100%; /* the width is 100% of map container width */
+            height: 100%; /* the height is 100% of map container height */
+        }
+
+        .predictions-header {
+            text-align: right;
+            color: #7BA697;
+            font-size: 32px;
+            margin-bottom: 15px;
+            font-family: 'YearOfTheCamel', sans-serif;
+        }
+
+        .prediction-item {
+            background-color: #EFEFEF;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+
+        .prediction-header {
+            display: flex; /* make elements beside others */
+            justify-content: space-between; /* space between elements */
+            align-items: center; /* align items to center in prediction item element */
+            margin-bottom: 10px; /* space below it */
+        }
+
+        .area-name {
+            font-size: 25px;
+            font-weight: bold;
+            color: #333;
+            font-family: 'YearOfTheCamel', sans-serif;
+        }
+
+        .status-badge {
+            padding: 5px 15px;
+            border-radius: 10px;
+            font-size: 17px;
+            color: white;
+            font-family: 'YearOfTheCamel', sans-serif;
+        }
+
+        .status-fire {
+            background-color: #E43411;
+        }
+
+        .status-safe {
+            background-color: #58AF63;
+        }
+
+        .prediction-date {
+            color: #000000;
+            font-size: 17px;
+            margin-bottom: 3px; /* space below it */
+            font-family: 'YearOfTheCamel', sans-serif;
+        }
+
+        /* Popup window style */
+        .popup-overlay { 
+            display: none; /* hide the popup */
+            position: fixed; 
+            top: 0; left: 0; right: 0; bottom: 0; /* it fit the entire page */
+            background-color: rgba(0, 0, 0, 0.5); /* the background color is black and 0.5 transparency */
+            z-index: 9999; /* above all elements */
+            align-items: center;
+            justify-content: center;
+        }
+
+        .popup-overlay.active {
+            display: flex; /* the background appear when popup window opened */
+        }
+
+        .popup-window {
+            background-color: white;
+            border-radius: 20px;
+            padding: 30px;
+            width: 450px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+
+        .popup-header {
+            text-align: center;
+            font-size: 22px;
+            font-weight: bold;
+            margin-bottom: 25px;
+            color: #333;
+            font-family: 'YearOfTheCamel', sans-serif;
+        }
+
+        .popup-map {
+            width: 100%;
+            height: 350px;
+            border-radius: 10px;
+            overflow: hidden; /* hide the overflow of the map */
+            margin-bottom: 20px;
+        }
+
+        #popupMap {
+            width: 100%;
+            height: 100%;
+        }
+
+        .popup-buttons {
+            display: flex; /* elements beside other */
+            gap: 15px;
+        }
+
+        .popup-buttons button {
+            flex: 1; /* buttons have same width */
+        }
+    </style>
+</head>
+<body>
+    <!-- Header Section -->
+    <div class="header-image"></div> 
+
+        <!-- Navigation Bar -->
+    <nav class="navbar" id="navbar">
+        <div class="nav-container">
+            <div class="nav-content">
+                <!-- logo -->
+                <img src="images/wameed logo Bar.svg" alt="Logo">
+
+                <!-- links -->
+                <ul class="nav-links">
+                    <li><a href="#home" class="nav-link active">الصفحة الرئيسية</a></li>
+                    <li><a href="PredictedFires.html" class="nav-link">التنبؤ بالحرائق</a></li>
+                    <li><a href="DetectedFires.html" class="nav-link">رصد الحرائق</a></li>
+                    <li><a href="#about" class="nav-link">من نحن</a></li>
+                </ul>
+
+                <!-- login and sign up buttons -->
+                <div class="nav-buttons">
+                    <button class="main-button btn-login" >تسجيل الدخول</button>
+                    <button class="main-button btn-signup">إنشاء حساب</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <!-- content of Predicted fires page -->
+    <div class="container"> 
+        <div class="left-section"> <!-- left section -->
+            <!-- when its clicked the function openPopup() will be called-->
+            <button class="main-button map-button" onclick="openPopup()">حدد المنطقة للتنبؤ</button> 
+            
+            <div class="map-container">
+                <div id="map"></div> <!-- map -->
+            </div>
+        </div>
+
+        <div class="right-section"> <!-- right section -->
+            <h1>التنبؤ بالحرائق</h1> <!-- title -->
+            <p class="subtitle">مدة التنبؤ: في الساعات 3–6 القادمة</p> <!-- subTitle -->
+
+            <div class="predictions-header">سجل التنبؤات</div> <!-- title -->
+            
+            <div class="prediction-item">
+                <div class="prediction-header">
+                    <span class="area-name">الرياض</span>
+                    <span class="status-badge status-fire">متنبأ بحدوث حريق</span>
+                </div>
+                <div class="prediction-date">تاريخ التنبؤ: 2026-01-27</div>
+                <div class="prediction-date">وقت التنبؤ: 09:14</div>
+            </div>
+
+            <div class="prediction-item">
+                <div class="prediction-header">
+                    <span class="area-name">مكة المكرمة</span>
+                    <span class="status-badge status-safe">غير متنبأ بحدوث حريق</span>
+                </div>
+                <div class="prediction-date">تاريخ التنبؤ: 2026-01-27</div>
+                <div class="prediction-date">وقت التنبؤ: 09:14</div>
+            </div>
+
+            <div class="prediction-item">
+                <div class="prediction-header">
+                    <span class="area-name">الدمام</span>
+                    <span class="status-badge status-fire">متنبأ بحدوث حريق</span>
+                </div>
+                <div class="prediction-date">تاريخ التنبؤ: 2026-01-27</div>
+                <div class="prediction-date">وقت التنبؤ: 09:14</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Popup window -->
+    <div class="popup-overlay" id="popupOverlay" onclick="closePopupOnOverlay(event)"> <!--the entire Popup window -->
+        <!-- Popup window -->
+        <div class="popup-window" onclick="event.stopPropagation()"> <!-- stop propagation of event to parent -->
+            <div class="popup-header">حدد المنطقة</div>
+            <div class="popup-map">
+                <div id="popupMap"></div>
+            </div>
+            <div class="popup-buttons">
+                <button class="main-button" onclick="closePopup()">إلغاء</button>
+                <button class="main-button" onclick="definePrediction()">تحديد</button>
+            </div>
+        </div>
+    </div>
+
+    <!--Footer Section-->
+    <footer class="footer">
+            <div class="footer-content">
+                 <img src="images/wameed logo footer.svg" alt="Logo" style="margin-bottom: 8px;">
+
+                <!-- copyright-->
+                <p class="copyright">© 2026 وميض - جميع الحقوق محفوظة</p>
+            </div>
+    </footer>
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script> <!-- import library for interactive maps -->
+    <script>
+        // initalize the map in varible map
+        // L indicate leaflet library,and put the map in div that has the id=map
+        // and the lan and lat is at riyadh, 5 indicate the zoom of the map
+        const map = L.map('map').setView([24.7136, 46.6753], 5); 
+        // bring the layer of map from openstreetmap
+        // addTo(map) we add the layer to map
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Add markers for predictions
+        const currentDay = new Date().toISOString().split('T')[0]; // the date of current day
+        // history of predictions for the user
+        const predictions = [
+            { name: 'الرياض', lat: 24.7136, lng: 46.6753, fire: true, date: '2026-02-02' },
+            { name: 'مكة المكرمة', lat: 21.3891, lng: 39.8579, fire: false, date: '2026-02-02' },
+            { name: 'الدمام', lat: 26.4207, lng: 50.0888, fire: true, date: '2026-01-27' }
+        ];
+
+        predictions.forEach(pred => { // loop to each prediction item
+            // display marker on map only if prediction item date match the current day date
+            if (pred.date === currentDay) { 
+                // initalize the marker on map which it's name icon
+                // if the pred.fire = true the marker would be red, if pred.fire = false it would be green
+                const icon = L.divIcon({
+                    className: 'custom-marker',
+                    html: `<div style="background-color: ${pred.fire ? '#E43411' : '#5cb85c'}; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>`,
+                    iconSize: [20, 20]
+                });
+                // L indicate leaflet library
+                // add the marker on map at pred.lat, pred.lng
+                // and it has the style of icon varible
+                L.marker([pred.lat, pred.lng], { icon: icon }).addTo(map);
+            }
+        });
+
+        
+        let popupMap; // represent the map inside popup window
+        let selectedMarker; // represent the marker 
+        let selectedCoordinations = null; // represent the lan, lat that the user selects
+
+        function openPopup() {
+            document.getElementById('popupOverlay').classList.add('active'); // add class named 'acitve' for element with id popupOverlay
+            setTimeout(() => {
+                if (!popupMap) { // if we not initalize the map for popup window yet
+                    // initalize the popupMap inside the div element that has the id popupMap
+                    // and at the coordination of riyadh, and the zoom is 5
+                    popupMap = L.map('popupMap').setView([24.7136, 46.6753], 5); 
+                    // bring the layer of map from openstreetmap
+                    // addTo(popupMap) we add the layer to map
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    }).addTo(popupMap); 
+
+                    // when the user click on the map, the function will be excuted
+                    popupMap.on('click', function(e) {  // e represent the info about the event
+                        selectedCoordinations = e.latlng; // return the coordinations that the user select
+                        if (selectedMarker) { // if the selectedMarker has value which mean the user previosuly select coordinations in map
+                            popupMap.removeLayer(selectedMarker); // remove the previous marker from map
+                        }
+                        // initalize the marker on map which it's name icon
+                        const icon = L.divIcon({
+                            className: 'custom-marker',
+                            html: '<div style="background-color: #e67e50; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>',
+                            iconSize: [20, 20]
+                        });
+
+                         // L indicate leaflet library
+                        // add the marker on map at e.latlng coordinations
+                        //  it has the style of icon varible
+                        // assign the value of selectedMarker so we can remove it later from map if needed
+                        selectedMarker = L.marker(e.latlng, { icon: icon }).addTo(popupMap);
+                    });
+                }
+                popupMap.invalidateSize(); // update the size of map so it can appear correctly
+            }, 100); // set Time out for 100ms so that the map appear correctly and without problems
+        }
+
+        // close the entire popup window
+        function closePopup() {
+            // remove the class named active from the element so the popup window will disappear
+            document.getElementById('popupOverlay').classList.remove('active'); 
+        }
+
+        // when user click the backgroun of popup window, which will be closed
+        function closePopupOnOverlay(event) {
+            if (event.target.id === 'popupOverlay') { // if event target the element with id === 'popupOverlay'
+                closePopup(); // call the function to close entire popup window
+            }
+        }
+
+        // function called when  user select 'تحديد' button
+        function definePrediction() {
+            if (selectedCoordinations) { // if selectedCoordinations has value so then the user has select the coordinations
+                alert(`تم تحديد الموقع: ${selectedCoordinations.lat.toFixed(1)}, ${selectedCoordinations.lng.toFixed(1)}`); // inform the user that it has been selected and show the coordinations, and show one number after the point
+                closePopup(); // then close the popup window
+            } else { // if the user has not select the coordinations yet
+                alert('الرجاء تحديد موقع على الخريطة');
+            }
+        }
+    </script>
+</body>
+</html>
