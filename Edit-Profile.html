@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl"> <!-- the language of the page and the direction of text -->
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- the width of page match the width of the device, initial scale of page when its loading -->
+    <title>تعديل الملف الشخصي - وميض</title> <!-- title of page -->
+    <link rel="stylesheet" href="wameed.css"> <!-- import shared css file -->
+    
+    <style>
+        /* Styles specific to Edit Profile */
+        .profile-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 80vh;
+            padding: 40px;
+        }
+
+        .profile-card {
+            background-color: #EFEFEF;
+            width: 100%;
+            max-width: 750px;
+            padding: 50px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+
+        .profile-icon {
+            width: 100px;
+            height: 100px;
+            background-color: #D9D9D9;
+            border-radius: 50%;
+            margin: 0 auto 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .profile-title {
+            font-size: 32px;
+            font-weight: 800;
+            margin-bottom: 40px;
+            color: black;
+        }
+
+        /* Input Fields */
+        .info-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .info-label {
+            font-size: 20px;
+            font-weight: 700;
+            width: 140px;
+            text-align: left;
+            color: black;
+            margin: 0;
+        }
+
+        /* Edited Input Style: White background to show it's editable */
+        .info-input {
+            flex: 1;
+            background-color: #FFFFFF; /* White for editing */
+            border: 1px solid #CCC;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 16px;
+            text-align: right;
+            color: #333;
+            max-width: 500px;
+            font-family: var(--font-main);
+            transition: border 0.3s;
+        }
+
+        .info-input:focus {
+            border: 2px solid #E67E50; /* Orange border on focus */
+            outline: none;
+        }
+
+        .profile-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 40px;
+        }
+
+        /* Unified button size and style */
+        .profile-buttons button {
+            width: 180px;
+            padding: 12px 0;
+            border: none;
+            border-radius: 10px;
+            font-size: 18px;
+            cursor: pointer;
+            font-family: var(--font-main);
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            transition: transform 0.2s;
+        }
+
+        /* Save Button */
+        .btn-save {
+            background-color: #EC5A2F; 
+        }
+
+        /* Cancel Button */
+        .btn-cancel {
+            background-color: #666; 
+        }
+        
+        /* Unified Hover Effect */
+        .profile-buttons button:hover {
+            transform: translateY(-2px);
+            opacity: 0.9;
+        }
+
+        /* Mobile Responsiveness */
+        @media (max-width: 600px) {
+            .info-group { flex-direction: column; gap: 10px; align-items: flex-start; }
+            .info-label { width: 100%; text-align: right; }
+            .info-input { width: 100%; max-width: none; }
+
+            /* Buttons stack on mobile */
+            .profile-buttons { flex-direction: column; gap: 15px; }
+            .profile-buttons button { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header Section -->
+    <div class="header-image"></div> 
+
+    <!-- Navigation Bar -->
+    <nav class="navbar" id="navbar">
+        <div class="nav-container">
+            <div class="nav-content">
+                <!-- logo -->
+                <img src="images/wameed logo Bar.svg" alt="Logo">
+
+                <!-- links -->
+                <ul class="nav-links">
+                    <li><a href="#home" class="nav-link active">الصفحة الرئيسية</a></li>
+                    <li><a href="PredictedFires.html" class="nav-link">التنبؤ بالحرائق</a></li>
+                    <li><a href="DetectedFires.html" class="nav-link">رصد الحرائق</a></li>
+                    <li><a href="#about" class="nav-link">من نحن</a></li>
+                </ul>
+
+                <!-- login and sign up buttons -->
+                <div class="nav-buttons">
+                    <button class="main-button btn-login" >تسجيل الدخول</button>
+                    <button class="main-button btn-signup">إنشاء حساب</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- content of Edit-Profile page -->
+    <main class="profile-container">
+        <div class="profile-card">
+            <div class="profile-icon">
+                <svg width="60" height="60" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 12C14.21 12 16 10.21 16 8C16 5.79 14.21 4 12 4C9.79 4 8 5.79 8 8C8 10.21 9.79 12 12 12ZM12 14C9.33 14 4 15.34 4 18V20H20V18C20 16.66 14.67 14 12 14Z" fill="#888"/>
+                </svg>
+            </div>
+
+            <h1 class="profile-title">تعـديـل البيـانـات</h1>
+
+            <form id="editForm">
+                <div class="info-group">
+                    <label class="info-label">الاسم:</label>
+                    <input type="text" id="nameInput" class="info-input" value="">
+                </div>
+
+                <div class="info-group">
+                    <label class="info-label">البريد الإلكتروني:</label>
+                    <input type="email" id="emailInput" class="info-input" value="" dir="ltr">
+                </div>
+
+                <div class="info-group">
+                    <label class="info-label">كلمة المرور:</label>
+                    <input type="text" id="passInput" class="info-input" value="" dir="ltr">
+                </div>
+
+                <div class="profile-buttons">
+                    <button type="button" class="btn-save" onclick="saveData()">
+                        <span>💾</span> حفظ
+                    </button>
+                    <button type="button" class="btn-cancel" onclick="goBack()">إلغاء</button>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+            <div class="footer-content">
+                
+                <!-- logo -->
+                 <img src="images/wameed logo footer.svg" alt="Logo" style="margin-bottom: 8px;">
+
+                <!-- copyright-->
+                <p class="copyright">© 2026 وميض - جميع الحقوق محفوظة</p>
+            </div>
+    </footer>
+
+    <script>
+        // 1. On Load: Get existing data to pre-fill the form
+        window.onload = function() {
+            // Default data if nothing is saved
+            const defaultName = "سامية الحسني";
+            const defaultEmail = "SamiaAlhassni@gmail.com";
+            const defaultPass = "SeniorYear@2026";
+
+            // Get from storage or use default
+            document.getElementById('nameInput').value = localStorage.getItem('userName') || defaultName;
+            document.getElementById('emailInput').value = localStorage.getItem('userEmail') || defaultEmail;
+            document.getElementById('passInput').value = localStorage.getItem('userPass') || defaultPass;
+        };
+
+        // 2. Save Data Function
+        function saveData() {
+            const name = document.getElementById('nameInput').value;
+            const email = document.getElementById('emailInput').value;
+            const pass = document.getElementById('passInput').value;
+
+            // Save to browser storage
+            localStorage.setItem('userName', name);
+            localStorage.setItem('userEmail', email);
+            localStorage.setItem('userPass', pass);
+
+            alert('تم حفظ التعديلات بنجاح!');
+            window.location.href = 'Profile.html'; // Go back to profile
+        }
+
+        // 3. Cancel Function
+        function goBack() {
+            window.location.href = 'Profile.html';
+        }
+    </script>
+</body>
+</html>
