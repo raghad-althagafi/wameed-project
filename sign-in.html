@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- the width of page match the width of the device, initial scale of page when its loading -->
+    <link rel="stylesheet" href="wameed.css"> <!-- import shared css file -->
+    <title>تسجيل الدخول</title>
+    
+    
+    <style>
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'YearOfTheCamel', sans-serif;
+        }
+
+        body {
+            background-color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 40px;
+            position: relative;
+            color: #333;
+        }
+
+        /* --- back button --- */
+        .back-button {
+            position: absolute;
+            top: 55px;
+            left: 35px;
+            width: 50px;
+            height: 50px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.3s ease;
+        }
+
+        .back-button:hover {
+            transform: translateX(-5px);
+        }
+
+        /* --- back con inside button --- */
+        .back-icon {
+            width: 60px;
+            height: 60px;
+        }
+
+        /* --- logo --- */
+        .logo-container {
+            text-align: center;
+            margin-bottom: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .logo-image {
+            width: 180px;
+            height: auto;
+            margin-bottom: 10px;
+        }
+
+        .text-logo {
+            width: 220px;      
+            height: auto;      
+            margin-top: -6px;  
+        }
+
+        /* --- sign in card --- */
+        .signin-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0px 10px 40px rgba(0, 0, 0, 0.08);
+            padding: 50px 60px;
+            width: 90%;
+            max-width: 500px;
+            margin: 0 auto;
+            margin-top: 8px;
+        }
+
+        .signin-title {
+            font-size: 40px;
+            color: var(--primary-color);
+            text-align: center;
+            margin-bottom: 45px;
+            font-weight: 500;
+        }
+
+        /* --- form --- */
+        .form-container {
+            margin-bottom: 28px;
+            text-align: right;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 20px;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .input-container {
+            position: relative;
+        }
+
+        .input-icon {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 14px 45px 14px 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            background: #f5f5f5;
+            direction: rtl;
+            text-align: right;
+            outline: none;
+        }
+
+        .form-input:focus {
+            background: #efefef;
+        }
+
+        /* --- sign in button --- */
+        .signin-button {
+            width: 100%;
+            margin-top: 15px;
+            padding: 16px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 17px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .signin-button:hover {
+            background-color: #d14d28;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(232, 93, 51, 0.3);
+        }
+
+        /* sign up link */
+        .signup-link {
+            text-align: center;
+            margin-top: 28px;
+            font-size: 15px;
+            color: #888;
+        }
+
+        .signup-link a {
+            color: #d4704a;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        /* error message */
+        .error-text {
+            display: none;
+            margin-top: 8px;
+            font-size: 14px;
+            color: #ff4d4f;
+        }
+
+        .form-container.error .form-input {
+            border: 1px solid #ff4d4f;
+            background: #fff;
+        }
+
+        .form-container.error .error-text {
+            display: block;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- back icon -->
+    <button class="back-button" onclick="history.back()" title="العودة">
+        <img  class="back-icon" src="images/back-icon.svg" alt="العودة">
+    </button>
+
+
+    <div class="logo-container">
+        <!-- logo -->
+        <img src="images/logo.png" alt="وميض" class="logo-image">  
+        <!-- name -->
+        <img class="text-logo" src="images/text logo.svg" alt="wameed logo" >
+    </div>
+
+    <div class="signin-card">
+        <h2 class="signin-title">تسجيل الدخول</h2>
+        
+        <form id="signinForm">
+            <!-- email -->
+            <div class="form-container">
+                <label class="form-label">البريد الإلكتروني</label>
+                <div class="input-container"> 
+                    <img class="input-icon" src="images/email-icon.svg" alt="الايميل">
+                    <input type="email" class="form-input" placeholder="مثال: example@gmail.com" id="email">
+                </div>
+                <small class="error-text">البريد الإلكتروني مطلوب</small>
+            </div>
+
+            <!-- password -->
+            <div class="form-container">
+                <label class="form-label">كلمة المرور</label>
+                <div class="input-container">
+                    <img class="input-icon" src="images/pass-icon.svg" alt="الباسوورد">
+                    <input type="password" class="form-input" placeholder="كلمة المرور" id="password">
+                </div>
+                <small class="error-text">فضلًا أدخل كلمة المرور للمتابعة.</small>
+            </div>
+
+            <!-- sign in button-->
+            <button type="submit" class="submit-button signin-button">تسجيل الدخول</button>
+
+            <!-- sign up link  -->
+            <div class="signup-link">
+                ليس لديك حساب؟ <a href="sign-up.html">سجّل الآن</a>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('signinForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            let hasError = false;
+
+            document.querySelectorAll('.form-container').forEach(container => {
+                const input = container.querySelector('.form-input');
+
+                if (!input.value.trim()) {
+                    container.classList.add('error');
+                    hasError = true;
+                } else {
+                    container.classList.remove('error');
+                }
+            });
+
+            if (hasError) return;
+
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+
+            alert('تم تسجيل الدخول بنجاح');
+            this.reset();
+        });
+    </script>
+
+</body>
+</html>
