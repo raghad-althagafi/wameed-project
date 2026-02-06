@@ -18,7 +18,7 @@ class Navbar {
     // logout the user
     logout() {
         localStorage.removeItem('currentUser');
-        window.location.href = 'home-page.html';
+        window.location.href = '../pages/home-page.html';
     }
 
     // generate the HTML structure of the navbar
@@ -28,7 +28,11 @@ class Navbar {
         const authButtons = this.user ? `
             <div class="nav-buttons logged-in">
                 <!-- Welcome message shown when user is logged in -->
+                <a href="../pages/Profile.html" class="welcome-link">
+                <img src="../assets/images/user-icon.svg" alt="Profile"
+                    class="navbar-user-icon">
                 <span class="welcome-text">أهلاً ${this.user.name}</span>
+            </a>
 
                 <!-- Logout button -->
                 <button class="main-button btn-logout" onclick="navbar.logout()">تسجيل الخروج</button>
@@ -54,14 +58,14 @@ class Navbar {
                     <div class="nav-content">
 
                         <!-- Navbar logo -->
-                        <img src="images/wameed logo Bar.svg" alt="Logo">
+                        <img src="../assets/images/wameed logo Bar.svg" alt="Logo">
 
                         <!-- Navigation links -->
                         <ul class="nav-links">
-                            <li><a href="home-page.html" class="nav-link">الصفحة الرئيسية</a></li>
-                            <li><a href="PredictedFires.html" class="nav-link">التنبؤ بالحرائق</a></li>
-                            <li><a href="DetectedFires.html" class="nav-link">رصد الحرائق</a></li>
-                            <li><a href="home-page.html#about" class="nav-link">من نحن</a></li>
+                            <li><a href="../pages/home-page.html" class="nav-link">الصفحة الرئيسية</a></li>
+                            <li><a href="../pages/PredictedFires.html" class="nav-link">التنبؤ بالحرائق</a></li>
+                            <li><a href="../pages/DetectedFires.html" class="nav-link">رصد الحرائق</a></li>
+                            <li><a href="../pages/home-page.html#about" class="nav-link">من نحن</a></li>
                         </ul>
 
                         <!-- Authentication buttons section -->
@@ -87,16 +91,16 @@ class Navbar {
     // Based on the current page URL
     setActiveLink() {
         const currentPage =
-            window.location.pathname.split('/').pop() || 'home-page.html#home';
+            window.location.pathname.split('/').pop() || 'home-page.html';
 
         document.querySelectorAll('.nav-link').forEach(link => {
-            const linkPage = link.getAttribute('href');
+            const linkPage = link.getAttribute('href').split('/').pop();
 
             if (linkPage === currentPage) {
                 link.classList.add('active');
             }
         });
-    }   
+    }  
 
 }
 
