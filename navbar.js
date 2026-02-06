@@ -18,7 +18,7 @@ class Navbar {
     // logout the user
     logout() {
         localStorage.removeItem('currentUser');
-        window.location.href = 'index.html';
+        window.location.href = 'home-page.html';
     }
 
     // generate the HTML structure of the navbar
