@@ -196,9 +196,12 @@
 <body>
 
     <!-- back icon -->
-    <button class="back-button" onclick="history.back()" title="العودة">
-        <img  class="back-icon" src="images/back-icon.svg" alt="العودة">
-    </button>
+    <a href="home-page.html">
+        <button class="back-button" title="العودة">
+            <img  class="back-icon" src="images/back-icon.svg" alt="العودة">
+        </button>
+    </a>
+    
 
    <div class="logo-container">
         <!-- logo -->
@@ -277,6 +280,12 @@
                 }
             });
 
+            document.getElementById('confirmPassword').addEventListener('input', () => {
+            const container =
+                document.getElementById('confirmPassword').closest('.form-container');
+            container.classList.remove('error');
+            });
+
             if (hasError) return;
 
             const name = document.getElementById('name').value.trim();
@@ -286,7 +295,13 @@
 
             // Password match validation
             if (password !== confirmPassword) {
-                alert('كلمتا السر غير متطابقتين');
+                const confirmContainer =
+                    document.getElementById('confirmPassword').closest('.form-container');
+
+                confirmContainer.classList.add('error');
+                confirmContainer.querySelector('.error-text').textContent =
+                    'كلمتا المرور غير متطابقتين';
+
                 return;
             }
 
