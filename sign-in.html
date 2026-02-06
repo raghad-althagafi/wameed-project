@@ -250,7 +250,6 @@
 
             document.querySelectorAll('.form-container').forEach(container => {
                 const input = container.querySelector('.form-input');
-
                 if (!input.value.trim()) {
                     container.classList.add('error');
                     hasError = true;
@@ -262,13 +261,20 @@
             if (hasError) return;
 
             const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
 
+            // ⚠️ Frontend demo 
+            const user = {
+                name: 'مستخدم',
+                email: email
+            };
 
-            alert('تم تسجيل الدخول بنجاح');
-            this.reset();
+            localStorage.setItem('currentUser', JSON.stringify(user));
+
+            // ✅ Redirect
+            window.location.href = 'home-page.html#home';
         });
-    </script>
+</script>
+
 
 </body>
 </html>

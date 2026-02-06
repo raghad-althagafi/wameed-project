@@ -260,39 +260,15 @@
             </div>
         </form>
     </div>
-
-    <script>
-        document.getElementById('signupForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const name = document.getElementById('name').value;
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            const confirmPassword = document.getElementById('confirmPassword').value;
-
-            // Password match validation
-            if (password !== confirmPassword) {
-                alert('كلمتا السر غير متطابقتين، يرجى المحاولة مرة أخرى.');
-                return;
-            }
-
-            // Simple validation feedback
-            if (name && email && password) {
-                console.log('Sign up attempt for:', email);
-                alert('تم إنشاء الحساب بنجاح! أهلاً بك في وميض.');
-                // Reset form
-                this.reset();
-            }
-        });
-        
+<script>
         document.getElementById('signupForm').addEventListener('submit', function (e) {
             e.preventDefault();
 
             let hasError = false;
 
+            // Validate empty fields
             document.querySelectorAll('.form-container').forEach(container => {
                 const input = container.querySelector('.form-input');
-
                 if (!input.value.trim()) {
                     container.classList.add('error');
                     hasError = true;
@@ -303,19 +279,30 @@
 
             if (hasError) return;
 
-            // password match
+            const name = document.getElementById('name').value.trim();
+            const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
             const confirmPassword = document.getElementById('confirmPassword').value;
 
+            // Password match validation
             if (password !== confirmPassword) {
                 alert('كلمتا السر غير متطابقتين');
                 return;
             }
 
-            alert('تم إنشاء الحساب بنجاح!');
-            this.reset();
+            // Save user (frontend demo)
+            const user = {
+                name: name,
+                email: email
+            };
+
+            localStorage.setItem('currentUser', JSON.stringify(user));
+
+            // Redirect to home page
+            window.location.href = 'home-page.html';
         });
-    </script>
+</script>
+
 
 </body>
 </html>
