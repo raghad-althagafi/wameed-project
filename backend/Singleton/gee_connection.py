@@ -5,6 +5,7 @@ PROJECT_ID = "wameed-gee"
 class GEEConnection:
     __instance = None
 
+    # Constructor
     def __init__(self):
         if GEEConnection.__instance is not None:
             raise Exception("Use get_instance() to access GEEConnection")

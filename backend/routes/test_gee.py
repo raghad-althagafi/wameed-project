@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify
-from services.gee_connection import GEEConnection
+from Singleton.gee_connection import GEEConnection
 
 test_gee_bp = Blueprint("test_gee", __name__)
 
