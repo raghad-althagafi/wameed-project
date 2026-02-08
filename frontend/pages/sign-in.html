@@ -27,7 +27,7 @@
             color: #333;
         }
 
-        /* --- back button --- */
+        /* back button */
         .back-button {
             position: absolute;
             top: 55px;
@@ -43,17 +43,18 @@
             transition: transform 0.3s ease;
         }
 
+        /* move button slightly when hovering */
         .back-button:hover {
             transform: translateX(-5px);
         }
 
-        /* --- back con inside button --- */
+        /* back con inside button */
         .back-icon {
             width: 60px;
             height: 60px;
         }
 
-        /* --- logo --- */
+        /* logo */
         .logo-container {
             text-align: center;
             margin-bottom: 24px;
@@ -62,19 +63,21 @@
             align-items: center;
         }
 
+        /* main image */
         .logo-image {
             width: 180px;
             height: auto;
             margin-bottom: 10px;
         }
 
+        /* text logo */
         .text-logo {
             width: 220px;      
             height: auto;      
             margin-top: -6px;  
         }
 
-        /* --- sign in card --- */
+        /* sign in card */
         .signin-card {
             background: white;
             border-radius: 20px;
@@ -86,6 +89,7 @@
             margin-top: 8px;
         }
 
+        /* card title */
         .signin-title {
             font-size: 40px;
             color: var(--primary-color);
@@ -94,12 +98,13 @@
             font-weight: 500;
         }
 
-        /* --- form --- */
+        /* form */
         .form-container {
             margin-bottom: 28px;
             text-align: right;
         }
 
+        /* labels */
         .form-label {
             display: block;
             font-size: 20px;
@@ -107,10 +112,12 @@
             font-weight: 500;
         }
 
+        /* input wrapper */
         .input-container {
             position: relative;
         }
 
+        /* input icon */
         .input-icon {
             position: absolute;
             right: 15px;
@@ -123,6 +130,7 @@
             justify-content: center;
         }
 
+        /* input field */
         .form-input {
             width: 100%;
             padding: 14px 45px 14px 15px;
@@ -135,11 +143,12 @@
             outline: none;
         }
 
+        /* input focus effect */
         .form-input:focus {
             background: #efefef;
         }
 
-        /* --- sign in button --- */
+        /* sign in button */
         .signin-button {
             width: 100%;
             margin-top: 15px;
@@ -154,6 +163,7 @@
             transition: all 0.3s ease;
         }
 
+        /* hover animation */
         .signin-button:hover {
             background-color: #d14d28;
             transform: translateY(-3px);
@@ -182,19 +192,19 @@
             color: #ff4d4f;
         }
 
+        /* when container has error class a red input appear */
         .form-container.error .form-input {
             border: 1px solid #ff4d4f;
             background: #fff;
         }
 
+        /* show error message when error occur */
         .form-container.error .error-text {
             display: block;
         }
-
     </style>
 </head>
 <body>
-
     <!-- back icon -->
     <a href="home-page.html">
         <button class="back-button" title="العودة">
@@ -245,38 +255,49 @@
     </div>
 
     <script>
+        //get the login form and listen for submit even
         document.getElementById('signinForm').addEventListener('submit', function (e) {
+            
+            //prevent page reload when submitting the form
             e.preventDefault();
 
+            //flag to check if there is any error
             let hasError = false;
 
+            //loop through all form input to validate empty fields
             document.querySelectorAll('.form-container').forEach(container => {
+
+                //get the input
                 const input = container.querySelector('.form-input');
+
+                //show error style if the input is sempty
                 if (!input.value.trim()) {
                     container.classList.add('error');
                     hasError = true;
                 } else {
+                    //remove error style if filled
                     container.classList.remove('error');
                 }
             });
 
+            //stop the login process if any error exists
             if (hasError) return;
 
+            //get the entered email
             const email = document.getElementById('email').value;
 
-            // demo 
+            //demo 
             const user = {
                 name: 'مستخدم',
                 email: email
             };
 
+            //save user data in localStorage
             localStorage.setItem('currentUser', JSON.stringify(user));
 
-            //Redirect
+            //redirect user to homepage after login
             window.location.href = 'home-page.html#home';
         });
 </script>
-
-
 </body>
 </html>

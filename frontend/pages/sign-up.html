@@ -26,7 +26,7 @@
             color: #333;
         }
 
-        /* --- back button --- */
+        /* back button */
         .back-button {
             position: absolute;
             top: 55px;
@@ -42,17 +42,18 @@
             transition: transform 0.3s ease;
         }
 
+        /* move button slightly when hovering */
         .back-button:hover {
             transform: translateX(-5px);
         }
 
-        /* --- back con inside button --- */
+        /* back con inside button */
         .back-icon {
             width: 60px;
             height: 60px;
         }
 
-        /* --- logo --- */
+        /* logo */
         .logo-container {
             text-align: center;
             margin-bottom: 24px;
@@ -61,19 +62,21 @@
             align-items: center;
         }
 
+        /* main image */
         .logo-image {
             width: 180px;
             height: auto;
             margin-bottom: 10px;
         }
 
+        /* text logo */
         .text-logo {
             width: 220px;      
             height: auto;      
             margin-top: -6px;  
         }
 
-        /* --- sign up card --- */
+        /* sign up card */
         .signup-card {
             background: white;
             border-radius: 20px;
@@ -86,6 +89,7 @@
             margin-bottom: 60px;
         }
 
+        /* card title */
         .signup-title {
             font-size: 40px;
             color: var(--primary-color);
@@ -94,12 +98,13 @@
             font-weight: 500;
         }
 
-        /* --- form --- */
+        /* form */
         .form-container {
             margin-bottom: 28px;
             text-align: right;
         }
 
+        /* labels */
         .form-label {
             display: block;
             font-size: 20px;
@@ -107,10 +112,12 @@
             font-weight: 500;
         }
 
+        /* input wrapper */
         .input-container {
             position: relative;
         }
 
+        /* input icon */
         .input-icon {
             position: absolute;
             right: 15px;
@@ -123,6 +130,7 @@
             justify-content: center;
         }
 
+        /* input field */
         .form-input {
             width: 100%;
             padding: 14px 45px 14px 15px;
@@ -135,11 +143,12 @@
             outline: none;
         }
 
+        /* input focus effect */
         .form-input:focus {
             background: #efefef;
         }
 
-        /* --- sign up button --- */
+        /* sign up button */
         .signup-button {
             width: 100%;
             margin-top: 15px;
@@ -154,6 +163,7 @@
             transition: all 0.3s ease;
         }
 
+        /* hover animation */
         .signin-button:hover {
             background-color: #d14d28;
             transform: translateY(-3px);
@@ -182,11 +192,13 @@
             color: #ff4d4f;
         }
 
+        /* when container has error class a red input appear */
         .form-container.error .form-input {
             border: 1px solid #ff4d4f;
             background: #fff;
         }
 
+        /* show error message when error occur */
         .form-container.error .error-text {
             display: block;
         }
@@ -264,40 +276,55 @@
         </form>
     </div>
 <script>
+        //get the login form and listen for submit even
         document.getElementById('signupForm').addEventListener('submit', function (e) {
+            
+            //prevent page reload when submitting the form
             e.preventDefault();
 
+            //flag to check if there is any error
             let hasError = false;
 
-            // Validate empty fields
+            //loop through all form input to validate empty fields
             document.querySelectorAll('.form-container').forEach(container => {
+                //get the input
                 const input = container.querySelector('.form-input');
+
+                //show error style if the input is sempty
                 if (!input.value.trim()) {
                     container.classList.add('error');
                     hasError = true;
                 } else {
+                    //remove error style if filled
                     container.classList.remove('error');
                 }
             });
 
+            //when the user types inside the confirm password field
             document.getElementById('confirmPassword').addEventListener('input', () => {
-            const container =
-                document.getElementById('confirmPassword').closest('.form-container');
-            container.classList.remove('error');
+                //get the container of the confirmPassword
+                const container =
+                    document.getElementById('confirmPassword').closest('.form-container');
+                //remove the error styling when the user starts typing again
+                container.classList.remove('error');
             });
 
+            //stop the sign up process if any error exists
             if (hasError) return;
 
+            //get values entered by the user
             const name = document.getElementById('name').value.trim();
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
             const confirmPassword = document.getElementById('confirmPassword').value;
 
-            // Password match validation
+            //password match validation
             if (password !== confirmPassword) {
+                //get the confirm password container
                 const confirmContainer =
                     document.getElementById('confirmPassword').closest('.form-container');
 
+                //add error styling
                 confirmContainer.classList.add('error');
                 confirmContainer.querySelector('.error-text').textContent =
                     'كلمتا المرور غير متطابقتين';
@@ -305,15 +332,16 @@
                 return;
             }
 
-            // Save user (frontend demo)
+            //demo
             const user = {
                 name: name,
                 email: email
             };
 
+            //save user data in localStorage
             localStorage.setItem('currentUser', JSON.stringify(user));
 
-            // Redirect to home page
+            //redirect user to homepage after sign up
             window.location.href = 'home-page.html';
         });
 </script>
