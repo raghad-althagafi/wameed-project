@@ -1,14 +1,8 @@
-from flask import Flask, jsonify
+from flask import Flask
+from routes.test_gee import test_gee_bp
 
 app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return "Wameed backend is running"
-
-@app.route("/api/test")
-def test():
-    return jsonify({"status": "ok", "message": "API is working"})
+app.register_blueprint(test_gee_bp)
 
 if __name__ == "__main__":
     app.run(debug=True)
