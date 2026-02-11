@@ -202,34 +202,13 @@
             <h1>التنبؤ بالحرائق</h1> <!-- title -->
             <p class="subtitle">مدة التنبؤ: في الساعات 3–6 القادمة</p> <!-- subTitle -->
 
-            <div class="predictions-header">سجل التنبؤات</div> <!-- title -->
-            
-            <div class="prediction-item">
-                <div class="prediction-header">
-                    <span class="area-name">الرياض</span>
-                    <span class="status-badge status-fire">متنبأ بحدوث حريق</span>
-                </div>
-                <div class="prediction-date">تاريخ التنبؤ: 2026-01-27</div>
-                <div class="prediction-date">وقت التنبؤ: 09:14</div>
-            </div>
+            <!-- list for predictions of today -->
+            <div class="predictions-header">تنبؤات اليوم</div> <!-- title -->
+            <div id="todayPredictions"></div> <!-- container for today's predictions -->
 
-            <div class="prediction-item">
-                <div class="prediction-header">
-                    <span class="area-name">مكة المكرمة</span>
-                    <span class="status-badge status-safe">غير متنبأ بحدوث حريق</span>
-                </div>
-                <div class="prediction-date">تاريخ التنبؤ: 2026-01-27</div>
-                <div class="prediction-date">وقت التنبؤ: 09:14</div>
-            </div>
-
-            <div class="prediction-item">
-                <div class="prediction-header">
-                    <span class="area-name">الدمام</span>
-                    <span class="status-badge status-fire">متنبأ بحدوث حريق</span>
-                </div>
-                <div class="prediction-date">تاريخ التنبؤ: 2026-01-27</div>
-                <div class="prediction-date">وقت التنبؤ: 09:14</div>
-            </div>
+            <!-- list for previous predictions -->
+            <div class="predictions-header" style="margin-top: 25px;">التنبؤات السابقة</div> <!-- title -->
+            <div id="previousPredictions"></div> <!-- container for previous predictions -->
         </div>
     </div>
 
@@ -274,9 +253,9 @@
         const currentDay = new Date().toISOString().split('T')[0]; // the date of current day
         // history of predictions for the user
         const predictions = [
-            { name: 'الرياض', lat: 24.7136, lng: 46.6753, fire: true, date: '2026-02-02' },
-            { name: 'مكة المكرمة', lat: 21.3891, lng: 39.8579, fire: false, date: '2026-02-02' },
-            { name: 'الدمام', lat: 26.4207, lng: 50.0888, fire: true, date: '2026-01-27' }
+            { name: 'الرياض', lat: 24.7136, lng: 46.6753, fire: true, date: '2026-02-11', time: '09:14' },
+            { name: 'مكة المكرمة', lat: 21.3891, lng: 39.8579, fire: false, date: '2026-02-02', time: '09:14' },
+            { name: 'الدمام', lat: 26.4207, lng: 50.0888, fire: true, date: '2026-01-27', time: '09:14' }
         ];
 
         predictions.forEach(pred => { // loop to each prediction item
@@ -295,6 +274,57 @@
                 L.marker([pred.lat, pred.lng], { icon: icon }).addTo(map);
             }
         });
+
+        // function to create prediction item in HTML list
+        function renderPredictionItem(pred) {
+            // create div element for prediction item
+            const item = document.createElement('div');
+            item.className = 'prediction-item'; // same style like your static items
+
+            // determine the badge class and text based on fire status
+            const badgeClass = pred.fire ? 'status-fire' : 'status-safe'; // choose red or green badge
+            const badgeText = pred.fire ? 'متنبأ بحدوث حريق' : 'غير متنبأ بحدوث حريق'; // badge text
+
+            // build the prediction item HTML structure
+            item.innerHTML = `
+                <div class="prediction-header">
+                    <span class="area-name">${pred.name}</span>
+                    <span class="status-badge ${badgeClass}">${badgeText}</span>
+                </div>
+                <div class="prediction-date">تاريخ التنبؤ: ${pred.date}</div>
+                <div class="prediction-date">وقت التنبؤ: ${pred.time}</div>
+            `;
+
+            return item; // return the created element
+        }
+
+        // split predictions into today's predictions and previous predictions
+        const todayPredictions = predictions.filter(pred => pred.date === currentDay); // list for today
+        const previousPredictions = predictions.filter(pred => pred.date !== currentDay); // list for previous
+
+        // get the containers from HTML
+        const todayContainer = document.getElementById('todayPredictions'); // container for today list
+        const previousContainer = document.getElementById('previousPredictions'); // container for previous list
+
+        // if there are no predictions for today, show a message
+        if (todayPredictions.length === 0) {
+            todayContainer.innerHTML = `<div class="prediction-date">لا توجد تنبؤات لليوم</div>`;
+        } else {
+            // render today's predictions in its container
+            todayPredictions.forEach(pred => {
+                todayContainer.appendChild(renderPredictionItem(pred)); // add item to today list
+            });
+        }
+
+        // if there are no previous predictions, show a message
+        if (previousPredictions.length === 0) {
+            previousContainer.innerHTML = `<div class="prediction-date">لا توجد تنبؤات سابقة</div>`;
+        } else {
+            // render previous predictions in its container
+            previousPredictions.forEach(pred => {
+                previousContainer.appendChild(renderPredictionItem(pred)); // add item to previous list
+            });
+        }
 
         
         let popupMap; // represent the map inside popup window

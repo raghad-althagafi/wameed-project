@@ -120,7 +120,7 @@
         .details-button {
             font-size: 16px;
             margin-top: 10px;
-}
+        }
 
         /* Popup window style */
         .popup-overlay { 
@@ -199,34 +199,13 @@
         <div class="right-section"> <!-- right section -->
             <h1>رصد الحرائق</h1> <!-- title -->
 
-            <div class="detections-header">سجل الحرائق المرصودة</div> <!-- title -->
-            
-            <div class="detection-item" data-status="fire">
-                <div class="detection-header">
-                    <span class="area-name">الرياض</span>
-                    <span class="status-badge status-fire">تم رصد حريق</span>
-                </div>
-                <div class="detection-date">تاريخ الرصد: 2026-01-27</div>
-                <div class="detection-date">وقت الرصد: 09:14</div>
-            </div>
+            <!-- list for detections of today -->
+            <div class="detections-header">رصد اليوم</div> <!-- title -->
+            <div id="todayDetections"></div> <!-- container for today's detections -->
 
-            <div class="detection-item" data-status="no-fire">
-                <div class="detection-header">
-                    <span class="area-name">مكة المكرمة</span>
-                    <span class="status-badge status-safe">لم يتم رصد حريق</span>
-                </div>
-                <div class="detection-date">تاريخ الرصد: 2026-01-27</div>
-                <div class="detection-date">وقت الرصد: 09:14</div>
-            </div>
-
-            <div class="detection-item" data-status="fire">
-                <div class="detection-header">
-                    <span class="area-name">الدمام</span>
-                    <span class="status-badge status-fire">تم رصد حريق</span>
-                </div>
-                <div class="detection-date">تاريخ الرصد: 2026-01-27</div>
-                <div class="detection-date">وقت الرصد: 09:14</div>
-            </div>
+            <!-- list for previous detections -->
+            <div class="detections-header" style="margin-top: 25px;">الرصد السابق</div> <!-- title -->
+            <div id="previousDetections"></div> <!-- container for previous detections -->
         </div>
     </div>
 
@@ -271,9 +250,9 @@
         const currentDay = new Date().toISOString().split('T')[0]; // the date of current day
         // history of detections for the user
         const detections = [
-            { name: 'الرياض', lat: 24.7136, lng: 46.6753, fire: true, date: '2026-02-03' },
-            { name: 'مكة المكرمة', lat: 21.3891, lng: 39.8579, fire: false, date: '2026-02-03' },
-            { name: 'الدمام', lat: 26.4207, lng: 50.0888, fire: true, date: '2026-01-27' }
+            { name: 'الرياض', lat: 24.7136, lng: 46.6753, fire: true, date: '2026-02-11', time: '09:14' },
+            { name: 'مكة المكرمة', lat: 21.3891, lng: 39.8579, fire: false, date: '2026-02-03', time: '09:14' },
+            { name: 'الدمام', lat: 26.4207, lng: 50.0888, fire: true, date: '2026-01-27', time: '09:14' }
         ];
 
         detections.forEach(dect => { // loop to each detection item
@@ -293,21 +272,69 @@
             }
         });
 
-        // loop for each detection item
-        document.querySelectorAll('.detection-item').forEach(item => {
-            const status = item.getAttribute('data-status');
-            
-            if (status === 'fire') { // if status of detection item == fire, then details button will be created for that item
-                const button = document.createElement('button');
-                button.className = 'main-button details-button';
-                button.textContent = 'التفاصيل';
-                
+        // function to create detection item in HTML list
+        function renderDetectionItem(dect) {
+            // create div element for detection item
+            const item = document.createElement('div');
+            item.className = 'detection-item'; // same style like your static items
+
+            // determine the badge class and text based on fire status
+            const badgeClass = dect.fire ? 'status-fire' : 'status-safe'; // choose red or green badge
+            const badgeText = dect.fire ? 'تم رصد حريق' : 'لم يتم رصد حريق'; // badge text
+
+            // build the detection item HTML structure
+            item.innerHTML = `
+                <div class="detection-header">
+                    <span class="area-name">${dect.name}</span>
+                    <span class="status-badge ${badgeClass}">${badgeText}</span>
+                </div>
+                <div class="detection-date">تاريخ الرصد: ${dect.date}</div>
+                <div class="detection-date">وقت الرصد: ${dect.time}</div>
+            `;
+
+            // if fire detected then add details button
+            if (dect.fire) { // if status of detection item == fire, then details button will be created for that item
+                const button = document.createElement('button'); // create details button
+                button.className = 'main-button details-button'; // same style for buttons
+                button.textContent = 'التفاصيل'; // text of button
+
                 button.onclick = function() { // when details button clicked
-                    window.location.href = 'Details.html';
+                    window.location.href = 'Details.html'; // navigate to details page
                 };
+
                 item.appendChild(button); // add button to item
             }
-        });
+
+            return item; // return the created element
+        }
+
+        // split detections into today's detections and previous detections
+        const todayDetections = detections.filter(dect => dect.date === currentDay); // list for today
+        const previousDetections = detections.filter(dect => dect.date !== currentDay); // list for previous
+
+        // get the containers from HTML
+        const todayContainer = document.getElementById('todayDetections'); // container for today list
+        const previousContainer = document.getElementById('previousDetections'); // container for previous list
+
+        // if there are no detections for today, show a message
+        if (todayDetections.length === 0) {
+            todayContainer.innerHTML = `<div class="detection-date">لا توجد عمليات رصد لليوم</div>`;
+        } else {
+            // render today's detections in its container
+            todayDetections.forEach(dect => {
+                todayContainer.appendChild(renderDetectionItem(dect)); // add item to today list
+            });
+        }
+
+        // if there are no previous detections, show a message
+        if (previousDetections.length === 0) {
+            previousContainer.innerHTML = `<div class="detection-date">لا توجد عمليات رصد سابقة</div>`;
+        } else {
+            // render previous detections in its container
+            previousDetections.forEach(dect => {
+                previousContainer.appendChild(renderDetectionItem(dect)); // add item to previous list
+            });
+        }
 
         
         let popupMap; // represent the map inside popup window
