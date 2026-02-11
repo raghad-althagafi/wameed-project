@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify   # Flask tools: Blueprint + reque
 import ee                                       # Google Earth Engine
 import math                                     # math (sin/cos/atan2)
 
-fire_spread_bluePrint = Blueprint("fire_spread", __name__)  # Blueprint لانتشار الحريق
+fire_spread_bluePrint = Blueprint("fire_spread", __name__) # Blue print for fire spread
 
 def _norm_deg(deg):                              # تطبيع الزاوية إلى 0..360
     return (deg % 360.0 + 360.0) % 360.0

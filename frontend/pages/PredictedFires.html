@@ -279,10 +279,10 @@
         function renderPredictionItem(pred) {
             // create div element for prediction item
             const item = document.createElement('div');
-            item.className = 'prediction-item'; // same style like your static items
+            item.className = 'prediction-item'; 
 
             // determine the badge class and text based on fire status
-            const badgeClass = pred.fire ? 'status-fire' : 'status-safe'; // choose red or green badge
+            const badgeClass = pred.fire ? 'status-fire' : 'status-safe'; // choose red or green badge based on status
             const badgeText = pred.fire ? 'متنبأ بحدوث حريق' : 'غير متنبأ بحدوث حريق'; // badge text
 
             // build the prediction item HTML structure
@@ -295,12 +295,12 @@
                 <div class="prediction-date">وقت التنبؤ: ${pred.time}</div>
             `;
 
-            return item; // return the created element
+            return item; // return the created prediction item
         }
 
         // split predictions into today's predictions and previous predictions
-        const todayPredictions = predictions.filter(pred => pred.date === currentDay); // list for today
-        const previousPredictions = predictions.filter(pred => pred.date !== currentDay); // list for previous
+        const todayPredictions = predictions.filter(pred => pred.date === currentDay); // list for today predictions
+        const previousPredictions = predictions.filter(pred => pred.date !== currentDay); // list for previous predictions
 
         // get the containers from HTML
         const todayContainer = document.getElementById('todayPredictions'); // container for today list
