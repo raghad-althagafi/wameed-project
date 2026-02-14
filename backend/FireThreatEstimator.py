@@ -1,0 +1,489 @@
+from flask import Blueprint, request, jsonify 
+import ee
+from Singleton.gee_connection import GEEConnection
+""" import ee  """
+ee = GEEConnection.get_instance().get_ee()
+
+# AOI
+LON = 46.694784302220256
+LAT = 24.628386140554312
+BUFFER_M = 1500  # buffer around point (meters) بعدين بغيرها ****************************
+
+AOI = ee.Geometry.Point([LON, LAT]).buffer(BUFFER_M)
+
+DAY = ee.Date("2025-02-11")
+START = DAY
+END = DAY.advance(1, "day") 
+
+# Normalization caps
+FRP_MAX = 200.0
+POP_MAX = 500.0
+""" ISI_CAP = 30.0  """
+FWI_CAP = 50.0 
+
+#Weights
+W_FIRE = 0.25
+W_SPREAD = 0.35
+W_EXPOSURE = 0.40
+
+
+# -----Utils-------
+def normalize(val, max_val):
+    return ee.Number(val).divide(max_val).clamp(0, 1)
+
+# Ensures value is not null (returns default if null) to prevent EE calculation errors
+def safe_number(val, default=0):
+    return ee.Number(ee.Algorithms.If(val, val, default))
+
+def mean_in_aoi(img, scale):
+    return ee.Number(
+        img.reduceRegion(
+            reducer=ee.Reducer.mean(),
+            geometry=AOI,
+            scale=scale,
+            maxPixels=1e9
+        ).values().get(0)
+    )
+
+# Fire Power - Fire Radiative Power (FRP)
+active_fire_collection = (
+    ee.ImageCollection("NASA/VIIRS/002/VNP14A1")
+    .filterDate(START, END)
+    .filterBounds(AOI)
+)
+
+active_fire_img = ee.Image(active_fire_collection.max())
+#active_fire_img = ee.Image(active_fire_collection.first())
+
+# FireMask >= 7 indicates fire pixels
+fire_mask = active_fire_img.select("FireMask").gte(7)
+
+frp_max = active_fire_img.select("MaxFRP").updateMask(fire_mask).reduceRegion(
+    reducer=ee.Reducer.max(),
+    geometry=AOI,
+    scale=500,
+    maxPixels=1e9
+).get("MaxFRP")
+
+frp_max = safe_number(frp_max, 0)
+fire_power = normalize(frp_max, FRP_MAX)
+
+# Spread Potential (FWI-based)
+#   - Compute FFMC -> ISI
+#   - compute DMC, DC -> BUI -> FWI final
+# -----------------------------------------------
+
+# Helpers: units + RH
+# Convert temperature from Kelvin (ERA5 units) to Celsius.
+def to_celsius(k_img):
+    return ee.Image(k_img).subtract(273.15)
+
+# Compute wind speed (km/h) from ERA5 wind components u and v (m/s).
+# Speed = sqrt(u^2 + v^2), then convert m/s -> km/h by multiplying 3.6
+def wind_speed_kmh(u, v):
+    u = ee.Image(u) # u = اتجاه شرق/غرب 
+    v = ee.Image(v) # v = اتجاه شمال/جنوب 
+    return u.pow(2).add(v.pow(2)).sqrt().multiply(3.6)
+
+# Estimate relative humidity (%) from air temperature (T) and dew point temperature (Td).
+# Uses the Magnus approximation to compute saturation vapor pressure (es) and actual vapor pressure (e),
+# then RH = (e/es) * 100, clamped to [0, 100].
+def rel_humidity_pct(temp_k, dew_k):
+    # RH from T and Td (Magnus approximation)
+    t = to_celsius(temp_k) # درجة حرارة الهواء
+    td = to_celsius(dew_k) # درجة حرارة الندى
+    es = t.expression("6.112*exp((17.67*T)/(T+243.5))", {"T": t})
+    e  = td.expression("6.112*exp((17.67*Td)/(Td+243.5))", {"Td": td})
+    rh = ee.Image(e).divide(es).multiply(100)
+    return rh.clamp(0, 100)
+
+# ----------------------
+# FWI: FFMC (daily) + ISI
+# ----------------------
+def ffmc_next(ffmc_prev, T_c, RH, W_kmh, R_mm):
+    
+    """
+    Compute next-day FFMC based on weather inputs
+    (temperature, humidity, wind, rainfall).
+    """
+
+    # Ensure FFMC is within valid range
+    ffmc_prev = ee.Image(ffmc_prev).clamp(0, 101)
+
+    # Convert FFMC to moisture content mo
+    mo = ffmc_prev.expression(
+        "147.2*(101.0-FFMC)/(59.5+FFMC)", {"FFMC": ffmc_prev}
+    )
+
+    # Rain effect (only if rain > 0.5 mm)
+    rf = ee.Image(R_mm).subtract(0.5).max(0)
+
+    # Moisture increase due to rainfall (standard FWI formula)
+    mr1 = mo.expression(
+        "mo + 42.5*rf*exp(-100.0/(251.0-mo))*(1-exp(-6.93/rf))",
+        {"mo": mo, "rf": rf}
+    )
+    # Additional adjustment for very wet fuels
+    mr2 = mr1.expression(
+        "mr1 + 0.0015*(mo-150.0)**2*sqrt(rf)",
+        {"mr1": mr1, "mo": mo, "rf": rf}
+    )
+    # Apply conditional rain correction
+    mr = ee.Image(ee.Algorithms.If(mo.gt(150), mr2, mr1)).min(250)
+
+    # Drying/wetting equilibrium
+    Ed = T_c.expression(
+        "0.942*(RH**0.679) + (11*exp((RH-100)/10)) + 0.18*(21.1-T)*(1-exp(-0.115*RH))",
+        {"RH": RH, "T": T_c}
+    )
+    Ew = T_c.expression(
+        "0.618*(RH**0.753) + (10*exp((RH-100)/10)) + 0.18*(21.1-T)*(1-exp(-0.115*RH))",
+        {"RH": RH, "T": T_c}
+    )
+    # Drying rate coefficient (ko)
+    ko = T_c.expression(
+        "0.424*(1-(RH/100)**1.7) + 0.0694*sqrt(W)*(1-(RH/100)**8)",
+        {"RH": RH, "W": W_kmh}
+    )
+    ko = ko.multiply(0.581).multiply(T_c.expression("exp(0.0365*T)", {"T": T_c}))
+
+    # Wetting rate coefficient (kw)
+    kw = T_c.expression(
+        "0.424*(1-((100-RH)/100)**1.7) + 0.0694*sqrt(W)*(1-((100-RH)/100)**8)",
+        {"RH": RH, "W": W_kmh}
+    )
+    kw = kw.multiply(0.581).multiply(T_c.expression("exp(0.0365*T)", {"T": T_c}))
+
+    # Update moisture m
+    m_dry = Ed.add(mr.subtract(Ed).multiply(ko.multiply(-1).exp()))
+    m_wet = Ew.subtract(Ew.subtract(mr).multiply(kw.multiply(-1).exp()))
+    m_mid = mr
+
+    m = ee.Image(
+        ee.Algorithms.If(
+            mr.gt(Ed), m_dry,
+            ee.Algorithms.If(mr.lt(Ew), m_wet, m_mid)
+        )
+    )
+
+    ffmc = m.expression("(59.5*(250.0-m))/(147.2+m)", {"m": m})
+    return ee.Image(ffmc).clamp(0, 101)
+
+def isi_from_ffmc_wind(ffmc, W_kmh):
+    ffmc = ee.Image(ffmc).clamp(0, 101)
+
+    m = ffmc.expression("147.2*(101.0-FFMC)/(59.5+FFMC)", {"FFMC": ffmc})
+
+    fW = ee.Image(W_kmh).expression("exp(0.05039*W)", {"W": W_kmh})
+    fF = m.expression("91.9*exp(-0.1386*m)*(1 + (m**5.31)/(4.93e7))", {"m": m})
+
+    isi = fW.multiply(fF).multiply(0.208)
+    return isi.max(0)
+
+# ----------------------
+# DMC / DC / BUI / FWI (SAFE EE ops)
+# ----------------------
+def dmc_next(dmc_prev, T, RH, R):
+    dmc_prev = ee.Image(dmc_prev)
+    T = ee.Image(T)
+    RH = ee.Image(RH)
+    R = ee.Image(R)
+
+    re = R.multiply(0.92).subtract(1.27).max(0)
+
+    mo = dmc_prev.expression(
+        "20 + exp(5.6348 - D/43.43)",
+        {"D": dmc_prev}
+    )
+
+    mr = mo.add(re.multiply(1000).divide(re.add(48.77)))
+
+    dmc_rain = mr.expression(
+        "43.43*(5.6348 - log(mr - 20))",
+        {"mr": mr}
+    )
+
+    dmc_no_rain = dmc_prev.add(
+        T.multiply(0.1).multiply(ee.Image.constant(100).subtract(RH)).divide(100)
+    )
+
+    return ee.Image(ee.Algorithms.If(R.gt(1.5), dmc_rain, dmc_no_rain)).max(0)
+
+def dc_next(dc_prev, T, R):
+    dc_prev = ee.Image(dc_prev)
+    T = ee.Image(T)
+    R = ee.Image(R)
+
+    re = R.multiply(0.83).subtract(1.27).max(0)
+
+    
+    dc_rain = dc_prev.subtract(re.multiply(400).divide(re.add(800)))
+    dc_no_rain = dc_prev.add(T.multiply(0.05))
+
+    return ee.Image(ee.Algorithms.If(R.gt(2.8), dc_rain, dc_no_rain)).max(0)
+
+def bui_from_dmc_dc(dmc, dc):
+    dmc = ee.Image(dmc)
+    dc = ee.Image(dc)
+
+    c04dc = dc.multiply(0.4)
+    c08dc = dc.multiply(0.8)
+
+    bui_case1 = dmc.multiply(c08dc).divide(dmc.add(c04dc))
+
+    ratio = c08dc.divide(dmc.add(c04dc))
+    term = ee.Image.constant(1).subtract(ratio)
+
+    bui_case2 = dmc.subtract(
+        term.multiply(
+            ee.Image.constant(0.92).add(
+                ee.Image.constant(0.0114).multiply(dmc).pow(1.7)
+            )
+        )
+    )
+
+    bui = ee.Image(ee.Algorithms.If(dmc.lte(c04dc), bui_case1, bui_case2))
+    return bui.max(0)
+
+def fwi_from_isi_bui(isi, bui):
+    isi = ee.Image(isi)
+    bui = ee.Image(bui)
+
+    fD_case1 = ee.Image.constant(0.626).multiply(bui.pow(0.809)).add(2)
+
+    fD_case2 = ee.Image.constant(1000).divide(
+        ee.Image.constant(25).add(
+            ee.Image.constant(108.64).multiply(bui.multiply(-0.023).exp())
+        )
+    )
+
+    fD = ee.Image(ee.Algorithms.If(bui.lte(80), fD_case1, fD_case2))
+
+    B = isi.multiply(fD).multiply(0.1)
+
+    fwi_case1 = B
+    fwi_case2 = ee.Image.constant(2.72).multiply(
+        ee.Image.constant(0.434).multiply(B.log()).pow(0.647)
+    ).exp()
+
+    fwi = ee.Image(ee.Algorithms.If(B.lte(1), fwi_case1, fwi_case2))
+    return fwi.max(0)
+
+# ----------------------
+# Build DAILY weather from ERA5-Land hourly
+# ----------------------
+era = (
+    ee.ImageCollection("ECMWF/ERA5_LAND/HOURLY")
+    .filterDate(START, END)
+    .filterBounds(AOI)
+)
+
+def daily_weather(date):
+    date = ee.Date(date)
+
+    # Take 09 UTC (≈ 12 PM KSA UTC+3)
+    img = (era
+           .filterDate(date, date.advance(1, "day"))
+           .filter(ee.Filter.calendarRange(9, 9, "hour"))
+           .first())
+
+    fallback = ee.Image.constant([273.15, 273.15, 0, 0, 0]).rename([
+        "temperature_2m",
+        "dewpoint_temperature_2m",
+        "u_component_of_wind_10m",
+        "v_component_of_wind_10m",
+        "total_precipitation"
+    ])
+
+    img = ee.Image(ee.Algorithms.If(img, img, fallback))
+
+    T  = img.select("temperature_2m")
+    Td = img.select("dewpoint_temperature_2m")
+    RH = rel_humidity_pct(T, Td)
+
+    u = img.select("u_component_of_wind_10m")
+    v = img.select("v_component_of_wind_10m")
+    W = wind_speed_kmh(u, v)
+
+    # precipitation sum over the day (m -> mm)
+    pr = (era.select("total_precipitation")
+          .filterDate(date, date.advance(1, "day"))
+          .sum()
+          .multiply(1000))
+
+    out = (to_celsius(T).rename("T")
+           .addBands(RH.rename("RH"))
+           .addBands(W.rename("W"))
+           .addBands(pr.rename("R")))
+
+    return out.set("system:time_start", date.millis())
+
+# date sequence
+n_days = ee.Number(ee.Date(END).difference(ee.Date(START), "day")).toInt()
+dates = ee.List.sequence(0, n_days.subtract(1)).map(
+    lambda d: ee.Date(START).advance(ee.Number(d), "day")
+)
+daily = ee.ImageCollection(dates.map(daily_weather))
+
+# ----------------------
+# Iterate to compute FFMC, ISI, DMC, DC, BUI, FWI day-by-day
+# ----------------------
+FFMC0 = ee.Image.constant(85)  # typical start
+DMC0  = ee.Image.constant(6)
+DC0   = ee.Image.constant(15)
+
+def step(img, state):
+    state = ee.Dictionary(state)
+
+    ffmc_prev = ee.Image(state.get("ffmc"))
+    dmc_prev  = ee.Image(state.get("dmc"))
+    dc_prev   = ee.Image(state.get("dc"))
+
+    img = ee.Image(img)
+    T  = img.select("T")
+    RH = img.select("RH")
+    W  = img.select("W")
+    R  = img.select("R")
+
+    ffmc_today = ffmc_next(ffmc_prev, T, RH, W, R)
+    isi_today  = isi_from_ffmc_wind(ffmc_today, W)
+
+    dmc_today  = dmc_next(dmc_prev, T, RH, R)
+    dc_today   = dc_next(dc_prev, T, R)
+
+    bui_today  = bui_from_dmc_dc(dmc_today, dc_today)
+    fwi_today  = fwi_from_isi_bui(isi_today, bui_today)
+
+    out = (img
+           .addBands(ffmc_today.rename("FFMC"))
+           .addBands(dmc_today.rename("DMC"))
+           .addBands(dc_today.rename("DC"))
+           .addBands(bui_today.rename("BUI"))
+           .addBands(isi_today.rename("ISI"))
+           .addBands(fwi_today.rename("FWI")))
+
+    col = ee.ImageCollection(state.get("col")).merge(ee.ImageCollection([out]))
+    return ee.Dictionary({"ffmc": ffmc_today, "dmc": dmc_today, "dc": dc_today, "col": col})
+
+init = ee.Dictionary({"ffmc": FFMC0, "dmc": DMC0, "dc": DC0, "col": ee.ImageCollection([])})
+result_iter = ee.Dictionary(daily.sort("system:time_start").iterate(step, init))
+fwi_daily = ee.ImageCollection(result_iter.get("col"))
+
+# ----------------------
+# Slope modifier
+# ----------------------
+dem = ee.Image("USGS/SRTMGL1_003")
+slope = ee.Terrain.slope(dem)  # degrees
+slope_factor = slope.divide(45).clamp(0, 1).multiply(0.3).add(1.0)  # 1.0 to 1.3
+
+# pick DAY image from fwi_daily
+day_img = ee.Image(
+    fwi_daily.filterDate(DAY, DAY.advance(1, "day")).first()
+)
+
+# fail-safe if missing
+day_img = ee.Image(ee.Algorithms.If(day_img, day_img, ee.Image.constant([0,0,0,0,0,0]).rename(
+    ["T","RH","W","R","ISI","FWI"]
+)))
+
+isi_day_img = day_img.select("ISI")
+fwi_day_img = day_img.select("FWI")
+
+# Normalize (0..1) + slope modifier
+""" isi_norm = isi_day_img.divide(ISI_CAP).clamp(0, 1) """
+fwi_norm = fwi_day_img.divide(FWI_CAP).clamp(0, 1)
+
+spread_driver = fwi_norm
+spread_img = spread_driver.multiply(slope_factor).clamp(0, 1)
+spread_index = mean_in_aoi(spread_img, 500)
+
+# ======================
+# 6) Exposure (Population)
+# ======================
+population = (
+    ee.ImageCollection("WorldPop/GP/100m/pop")
+    .filterDate("2020-01-01", "2021-01-01")
+    .mean()
+)
+
+pop_mean = population.reduceRegion(
+    reducer=ee.Reducer.mean(),
+    geometry=AOI,
+    scale=100,
+    maxPixels=1e9
+).values().get(0)
+
+pop_mean = safe_number(pop_mean, 0)
+exposure = normalize(pop_mean, POP_MAX)
+
+# ======================
+# 7) Threat Score
+# ======================
+threat_score = (
+    fire_power.multiply(W_FIRE)
+    .add(spread_index.multiply(W_SPREAD))
+    .add(exposure.multiply(W_EXPOSURE))
+    .clamp(0, 1)
+)
+
+threat_level = ee.Algorithms.If(
+    threat_score.lt(0.33), "Low",
+    ee.Algorithms.If(threat_score.lt(0.66), "Medium", "High")
+)
+
+# ======================
+# 8) Output
+# ======================
+result = {
+    "AOI_center": (LON, LAT),
+    "date": DAY.format("YYYY-MM-dd").getInfo(),
+
+    "FRP_max_MW": frp_max.getInfo(),
+    "fire_power_norm": fire_power.getInfo(),
+
+    "ISI_day_mean_raw": mean_in_aoi(isi_day_img, 500).getInfo(),
+    "FWI_day_mean_raw": mean_in_aoi(fwi_day_img, 500).getInfo(),
+
+    "spread_index": spread_index.getInfo(),
+
+    "population_mean": pop_mean.getInfo(),
+    "exposure_norm": exposure.getInfo(),
+
+    "threat_score": threat_score.getInfo(),
+    "threat_level": threat_level.getInfo(),
+}
+
+print(" Fire Threat Result")
+for k, v in result.items():
+    print(f"{k}: {v}")
+
+# ======================
+# 9) Debug checks (fire present + FRP stats)
+# ======================
+fire_present = ee.Number(
+    active_fire_img.select("FireMask").gte(7).reduceRegion(
+        ee.Reducer.anyNonZero(),
+        AOI,
+        1000,
+        maxPixels=1e9
+    ).get("FireMask")
+)
+
+print("Fire present in AOI (0/1):", fire_present.getInfo())
+
+frp_max_dbg = active_fire_img.select("MaxFRP").updateMask(fire_mask).reduceRegion(
+    reducer=ee.Reducer.max(),
+    geometry=AOI,
+    scale=1000,
+    maxPixels=1e9
+).get("MaxFRP")
+
+frp_mean_dbg = active_fire_img.select("MaxFRP").updateMask(fire_mask).reduceRegion(
+    reducer=ee.Reducer.mean(),
+    geometry=AOI,
+    scale=1000,
+    maxPixels=1e9
+).get("MaxFRP")
+
+""" print("FRP max:", ee.Number(safe_number(frp_max_dbg, 0)).getInfo())
+print("FRP mean:", ee.Number(safe_number(frp_mean_dbg, 0)).getInfo()) """
