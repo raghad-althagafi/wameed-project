@@ -7,13 +7,17 @@
     <title>التفاصيل - وميض</title> <!-- title of page -->
     <link rel="stylesheet" href="../css/wameed.css"> <!-- import shared css file -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" /> <!-- import library for interactive maps -->
-    
-    <style>   
-        
+
+    <!-- Material Icons (for share icon) -->
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL@0..1&display=swap" />
+
+    <style>
         /* Main container for page content */
         .container {
             max-width: 1400px;
-            margin: 0 auto; /* Center the container */
+            margin: 0 auto;
+            /* Center the container */
             padding: 60px 40px 40px;
         }
 
@@ -34,20 +38,24 @@
         /* Grid Layout for Info Cards */
         .grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr); /* 3 equal columns */
-            gap: 30px; /* Space between cards */
+            grid-template-columns: repeat(3, 1fr);
+            /* 3 equal columns */
+            gap: 30px;
+            /* Space between cards */
             margin-bottom: 30px;
         }
 
         /* Card Styles */
         .card {
-            background-color: #EFEFEF; /* Light gray background */
+            background-color: #EFEFEF;
+            /* Light gray background */
             padding: 25px;
             border-radius: 12px;
             text-align: center;
             display: flex;
             flex-direction: column;
-            justify-content: center; /* Center content vertically */
+            justify-content: center;
+            /* Center content vertically */
             min-height: 180px;
         }
 
@@ -102,6 +110,8 @@
             justify-content: center;
             align-items: center;
             padding-top: 90px;
+            gap: 14px;
+            flex-wrap: wrap;
         }
 
         /* PDF Button Styles */
@@ -122,18 +132,91 @@
             gap: 8px;
         }
 
+        /* Hover effect */
         .pdf-btn:hover {
             background-color: #FB7047; /* Hover color */
             transform: translateY(-2px); /* Slight lift effect */
             box-shadow: 0 6px 16px rgba(236, 90, 47, 0.35);
         }
 
-        
+        /* Share Button Styles */
+        .share-btn {
+            background-color: #666;
+            color: white;
+            padding: 16px 58px;
+            border: none;
+            border-radius: 12px;
+            font-size: 24px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: var(--font-main);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Hover effect */
+        .share-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+        }
+
+        /* Material icon size */
+        .material-symbols-outlined {
+            font-size: 28px;
+            line-height: 1;
+        }
+
+        /* info icon next to label */
+        .info-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background-color: #D9D9D9;
+            color: #000;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            margin-right: 8px; /* because RTL */
+            position: relative;
+            user-select: none;
+        }
+
+        /* tooltip box */
+        .info-tooltip {
+            display: none;
+            position: absolute;
+            top: 28px;
+            right: 0;
+            /* RTL */
+            width: 260px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 14px;
+            font-weight: 300;
+            line-height: 1.6;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+            z-index: 999;
+        }
+
+        /* show tooltip when active */
+        .info-icon.active .info-tooltip {
+            display: block;
+        }
 
         /* PDF Generation Styles (Triggers only when printing) */
         @media print {
+
             /* Hide interactive elements when printing */
             .pdf-btn,
+            .share-btn,
             .map-section,
             .footer,
             .navbar {
@@ -142,12 +225,12 @@
 
             /* Grid adjustment to fit everything in one page */
             .grid {
-                grid-template-columns: repeat(3, 1fr); 
+                grid-template-columns: repeat(3, 1fr);
                 gap: 15px;
                 margin-bottom: 15px;
             }
 
-            /* Card styling for clean PDF look */
+            /* Card styling */
             .card {
                 background-color: transparent;
                 border: 1.5px solid #000;
@@ -170,55 +253,13 @@
                 font-size: 12px;
                 margin-top: 4px;
             }
-            
-            }
-            /* info icon next to label */
-            .info-icon {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            background-color: #D9D9D9;
-            color: #000;
-            font-size: 14px;
-            font-weight: 700;
-            cursor: pointer;
-            margin-right: 8px; /* because RTL */
-            position: relative;
-            user-select: none;
         }
-
-        /* tooltip box */
-        .info-tooltip {
-            display: none;
-            position: absolute;
-            top: 28px;
-            right: 0; /* RTL */
-            width: 260px;
-            background-color: #fff;
-            border: 1px solid #ccc;
-            border-radius: 10px;
-            padding: 10px 12px;
-            font-size: 14px;
-            font-weight: 300;
-            line-height: 1.6;
-            box-shadow: 0 6px 16px rgba(0,0,0,0.15);
-            z-index: 999;
-        }
-
-        /* show tooltip when active */
-        .info-icon.active .info-tooltip {
-            display: block;
-        }
-
     </style>
 </head>
 
 <body>
     <!-- Header Section -->
-    <div class="header-image"></div> 
+    <div class="header-image"></div>
 
     <!-- Navigation Bar -->
     <div id="navbar-container"></div>
@@ -278,26 +319,33 @@
                     <span>⬇</span>
                     <span>PDF</span>
                 </button>
+
+                <!-- Share Button -->
+                <button class="share-btn" onclick="shareLocation()">
+                    <span class="material-symbols-outlined">open_in_new</span>
+                    <span>مشاركة</span>
+                </button>
             </div>
         </div>
     </main>
 
     <!-- Footer -->
     <footer class="footer">
-            <div class="footer-content">
-                
-                <!-- logo -->
-                 <img src="../assets/images/wameed logo footer.svg" alt="Logo" style="margin-bottom: 8px;">
-
-                <!-- copyright-->
-                <p class="copyright">© 2026 وميض - جميع الحقوق محفوظة</p>
-            </div>
+        <div class="footer-content">
+            <!-- logo -->
+            <img src="../assets/images/wameed logo footer.svg" alt="Logo" style="margin-bottom: 8px;">
+            <!-- copyright-->
+            <p class="copyright">© 2026 وميض - جميع الحقوق محفوظة</p>
+        </div>
     </footer>
 
+    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
     <script>
         // 1. Get URL Parameters (Data sent from the previous page)
         const params = new URLSearchParams(window.location.search);
+
         // Default values if no params are present
         const regionName = params.get('region') || "الرياض";
         const lat = parseFloat(params.get('lat')) || 24.7136;
@@ -323,9 +371,9 @@
         // 3. Initialize Interactive Map
         const map = L.map('map').setView([lat, lng], 5); // Set view to region coordinates
 
-        // Add OpenStreetMap Tile Layer
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        // Load the base map tiles (background layer) and add them to the map
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+            maxZoom: 19
         }).addTo(map);
 
         // Create Custom Fire Marker Icon
@@ -358,8 +406,8 @@
 
         // toggle tooltip for info icon
         function toggleInfo(el) {
-        el.classList.toggle('active'); // show/hide tooltip
-    }
+            el.classList.toggle('active'); // show/hide tooltip
+        }
 
 
     // ------------ Spread Direction --------------------
@@ -400,6 +448,40 @@
 
     loadSpreadDirection(); // call the function
 
+        // Share the exact fire location (Latitude/Longitude + link)
+        function shareLocation() {
+            const latFixed = Number(lat).toFixed(6);
+            const lngFixed = Number(lng).toFixed(6);
+
+            const googleMapsUrl = `https://www.google.com/maps?q=${latFixed},${lngFixed}`;
+
+            const text =
+`📍 موقع الحريق - وميض
+المنطقة: ${regionName}
+Latitude: ${latFixed}
+Longitude: ${lngFixed}
+Google Maps: ${googleMapsUrl}`;
+
+            // Native share (mobile + supported browsers)
+            if (navigator.share) {
+                navigator.share({
+                    title: 'موقع الحريق - وميض',
+                    text: text,
+                    url: googleMapsUrl
+                }).catch(() => { });
+                return;
+            }
+
+            // Fallback: copy to clipboard
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text)
+                    .then(() => alert('تم نسخ موقع الحريق (Lat/Lng + الرابط). الصقيه وارسليه للشخص.'))
+                    .catch(() => prompt('انسخي النص التالي وارسليه:', text));
+            } else {
+                prompt('انسخي النص التالي وارسليه:', text);
+            }
+        }
     </script>
 </body>
+
 </html>
