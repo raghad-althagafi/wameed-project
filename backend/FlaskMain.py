@@ -1,10 +1,12 @@
 from flask import Flask #import Flask calss from flask library
+from flask_cors import CORS
 from routes.test_gee import test_gee_bp
 from Singleton.gee_connection import GEEConnection #import GEEConnection calss from gee_connection file
 from FireSpreadEstimator import fire_spread_bluePrint #import fire_spread_bluePrint from FireSpreadEstimator file
 
 
 app = Flask(__name__) # create the server
+CORS(app)
 
 GEEConnection.get_instance() # initalize google earth engine connection once turning on the server, so whenever connection needed after that it will be returned
 
