@@ -2,6 +2,8 @@
 backend/venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
 # VS Code
 .vscode/
@@ -9,3 +11,7 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Firebase / Secrets
+firebase_key.json
+backend/firebase_key.json
