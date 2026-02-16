@@ -11,7 +11,7 @@ def _dir8_ar(angle_deg): # the function take the degree as input and convert the
     dirs = ["شمال", "شمال شرق", "شرق", "جنوب شرق", "جنوب", "جنوب غرب", "غرب", "شمال غرب"] # divided into 8 directions
     return dirs[int((_norm_deg(angle_deg) + 22.5) // 45) % 8]
 
-@fire_spread_bluePrint.route("/fire-spread-direction", methods=["GET", "POST"])
+@fire_spread_bluePrint.route("/fire-spread-direction", methods=["POST"])
 def spread_direction():
 
      # read json
@@ -21,9 +21,9 @@ def spread_direction():
     lon = float(data.get("lon")) # take lon from json and convert it to float
     when_iso = data.get("datetime") # take datetime from json
 
-    # if datetime missing it will return error message
-    if not when_iso:
-        return jsonify({"error": "Missing datetime"}), 400
+    # if datetimelat, lon missing it will return error message
+    if lat is None or lon is None or not when_iso:
+        return jsonify({"error": "Missing lat/lon/datetime"}), 400
 
     # ------------- Convert user point into 1 km * 1 km region ----------------
     point = ee.Geometry.Point([lon, lat]) # the point the user selects
@@ -37,14 +37,14 @@ def spread_direction():
     dem = ee.Image("USGS/SRTMGL1_003")
     terrain = ee.Terrain.products(dem)
 
-    slope = terrain.select("slope").reduceRegion( # متوسط الميل داخل المنطقة
+    slope = terrain.select("slope").reduceRegion( 
         reducer=ee.Reducer.mean(),
         geometry=region,
         scale=30,
         bestEffort=True
     ).get("slope") # return the slope mean foe the region
 
-    aspect = terrain.select("aspect").reduceRegion(  # متوسط اتجاه الانحدار داخل المنطقة
+    aspect = terrain.select("aspect").reduceRegion( 
         reducer=ee.Reducer.mean(),
         geometry=region,
         scale=30,
@@ -83,8 +83,8 @@ def spread_direction():
     v_val = float(vals.get("v") or 0.0)
 
     
-    wind_to_deg = _norm_deg(math.degrees(math.atan2(u_val, v_val)))  # wind direction
-    wind_speed = math.sqrt(u_val*u_val + v_val*v_val)                # wind speed
+    wind_to_deg = _norm_deg(math.degrees(math.atan2(u_val, v_val))) # wind direction
+    wind_speed = math.sqrt(u_val*u_val + v_val*v_val) # wind speed
 
     # calculate the diffrence between wind_to_deg and upslope_deg, 
     omega = math.radians(_norm_deg(wind_to_deg - upslope_deg)) # convert to radians for sin, cos later

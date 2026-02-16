@@ -7,7 +7,11 @@ class FirebaseConnection:
     @staticmethod
     def get_db():
         if FirebaseConnection._db is None:
-            cred = credentials.Certificate("firebase_key.json")  # لأنه داخل backend
-            firebase_admin.initialize_app(cred)
+            cred = credentials.Certificate("firebase_key.json")
+
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app(cred)
+
             FirebaseConnection._db = firestore.client()
+
         return FirebaseConnection._db
