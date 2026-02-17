@@ -1,25 +1,25 @@
 /* fonts */
 @font-face {
     font-family: 'YearOfTheCamel';
-    src: url("../assets/fonts/The Year of The Camel/The Year of The Camel/TheYearofTheCamel-ExtraBold.otf") format("opentype");
+    src: url("/assets/fonts/The Year of The Camel/The Year of The Camel/TheYearofTheCamel-ExtraBold.otf") format("opentype");
     font-weight: 800;
 }
 
 @font-face {
     font-family: 'YearOfTheCamel';
-    src: url("../assets/fonts/The Year of The Camel/The Year of The Camel/TheYearofTheCamel-Regular.otf") format("opentype");
+    src: url("/assets/fonts/The Year of The Camel/The Year of The Camel/TheYearofTheCamel-Regular.otf") format("opentype");
     font-weight: 400;
 }
 
 @font-face {
     font-family: 'YearOfTheCamel';
-    src: url("../assets/fonts/The Year of The Camel/The Year of The Camel/TheYearofTheCamel-Medium.otf") format("opentype");
+    src: url("/assets/fonts/The Year of The Camel/The Year of The Camel/TheYearofTheCamel-Medium.otf") format("opentype");
     font-weight: 500;
 }
 
 @font-face {
     font-family: 'YearOfTheCamel';
-    src: url("../assets/fonts/The Year of The Camel/The Year of The Camel/TheYearofTheCamel-Bold.otf") format("opentype");
+    src: url("/assets/fonts/The Year of The Camel/The Year of The Camel/TheYearofTheCamel-Bold.otf") format("opentype");
     font-weight: 700;
 }
 
@@ -99,7 +99,7 @@ body{
 /* header image */
 .header-image {
     height: 270px;       
-    background: url("../assets/images/Header image.png") center / cover no-repeat;
+    background: url("/assets/images/Header image.png") center / cover no-repeat;
 }
 
 /* navbar */

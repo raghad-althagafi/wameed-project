@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- the width of page match the width of the device, initial scale of page when its loading -->
     <title>التفاصيل - وميض</title> <!-- title of page -->
-    <link rel="stylesheet" href="../css/wameed.css"> <!-- import shared css file -->
+    <link rel="stylesheet" href="/css/wameed.css"> <!-- import shared css file -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" /> <!-- import library for interactive maps -->
 
     <!-- Material Icons (for share icon) -->
@@ -293,7 +293,7 @@
         <section class="grid">
             <div class="card">
                 <div class="label">شدة الحريق المقدرة</div>
-                <div class="value">عالية</div>
+                <div class="value" id="threatLevel">جاري الحساب...</div>
             </div>
             <div class="card">
             <div class="label">
@@ -445,8 +445,36 @@
             document.getElementById("spreadDir").textContent = "خطأ في الحساب";
         }
     }
+    loadFireThreat();
 
     loadSpreadDirection(); // call the function
+
+    // --------- Fire threat ---------
+    async function loadFireThreat() {
+        try {
+            const res = await fetch("http://127.0.0.1:5000/fire-threat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    lat: tempLat,
+                    lon: tempLng,
+                    datetime: whenIso
+                })
+            });
+
+            const fireThreat = await res.json();  
+            console.log("status:", res.status);
+            console.log("fireThreat:", fireThreat);       
+            document.getElementById("threatLevel").textContent =
+                fireThreat.threat_level ?? "غير متوفر";
+
+        } catch (err) {
+            console.error(err);
+            document.getElementById("threatLevel").textContent = "خطأ في الحساب";
+        }
+    }
+
+
 
         // Share the exact fire location (Latitude/Longitude + link)
         function shareLocation() {

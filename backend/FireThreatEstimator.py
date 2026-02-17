@@ -1,31 +1,22 @@
-from flask import Blueprint, request, jsonify 
+from flask import Blueprint, request, jsonify
 import ee
-from Singleton.gee_connection import GEEConnection
-""" import ee  """
-ee = GEEConnection.get_instance().get_ee()
+import traceback
+""" from Singleton.gee_connection import GEEConnection """
 
-# AOI
-LON = 46.694784302220256
-LAT = 24.628386140554312
-BUFFER_M = 1500  # buffer around point (meters) بعدين بغيرها ****************************
+fire_threat_bp = Blueprint("fire_threat", __name__)
+""" ee = GEEConnection.get_instance().get_ee() """
 
-AOI = ee.Geometry.Point([LON, LAT]).buffer(BUFFER_M)
-
-DAY = ee.Date("2025-02-11")
-START = DAY
-END = DAY.advance(1, "day") 
+BUFFER_M = 500  # buffer around point (meters) بعدين بغيرها ****************************
 
 # Normalization caps
 FRP_MAX = 200.0
 POP_MAX = 500.0
-""" ISI_CAP = 30.0  """
-FWI_CAP = 50.0 
+FWI_CAP = 50.0
 
 #Weights
 W_FIRE = 0.25
 W_SPREAD = 0.35
 W_EXPOSURE = 0.40
-
 
 # -----Utils-------
 def normalize(val, max_val):
@@ -35,61 +26,32 @@ def normalize(val, max_val):
 def safe_number(val, default=0):
     return ee.Number(ee.Algorithms.If(val, val, default))
 
-def mean_in_aoi(img, scale):
-    return ee.Number(
-        img.reduceRegion(
-            reducer=ee.Reducer.mean(),
-            geometry=AOI,
-            scale=scale,
-            maxPixels=1e9
-        ).values().get(0)
-    )
+def mean_in_aoi(img, aoi, scale, default=0):
+    val = img.reduceRegion(
+        reducer=ee.Reducer.mean(),
+        geometry=aoi,
+        scale=scale,
+        maxPixels=1e9
+    ).values().get(0)
+    return safe_number(val, default)   # ✅ تمنع null
 
-# Fire Power - Fire Radiative Power (FRP)
-active_fire_collection = (
-    ee.ImageCollection("NASA/VIIRS/002/VNP14A1")
-    .filterDate(START, END)
-    .filterBounds(AOI)
-)
 
-active_fire_img = ee.Image(active_fire_collection.max())
-#active_fire_img = ee.Image(active_fire_collection.first())
-
-# FireMask >= 7 indicates fire pixels
-fire_mask = active_fire_img.select("FireMask").gte(7)
-
-frp_max = active_fire_img.select("MaxFRP").updateMask(fire_mask).reduceRegion(
-    reducer=ee.Reducer.max(),
-    geometry=AOI,
-    scale=500,
-    maxPixels=1e9
-).get("MaxFRP")
-
-frp_max = safe_number(frp_max, 0)
-fire_power = normalize(frp_max, FRP_MAX)
-
-# Spread Potential (FWI-based)
-#   - Compute FFMC -> ISI
-#   - compute DMC, DC -> BUI -> FWI final
-# -----------------------------------------------
 
 # Helpers: units + RH
-# Convert temperature from Kelvin (ERA5 units) to Celsius.
-def to_celsius(k_img):
+def to_celsius(k_img): # Convert temperature from Kelvin (ERA5 units) to Celsius
     return ee.Image(k_img).subtract(273.15)
 
 # Compute wind speed (km/h) from ERA5 wind components u and v (m/s).
 # Speed = sqrt(u^2 + v^2), then convert m/s -> km/h by multiplying 3.6
 def wind_speed_kmh(u, v):
     u = ee.Image(u) # u = اتجاه شرق/غرب 
-    v = ee.Image(v) # v = اتجاه شمال/جنوب 
+    v = ee.Image(v)# v = اتجاه شمال/جنوب
     return u.pow(2).add(v.pow(2)).sqrt().multiply(3.6)
 
 # Estimate relative humidity (%) from air temperature (T) and dew point temperature (Td).
 # Uses the Magnus approximation to compute saturation vapor pressure (es) and actual vapor pressure (e),
 # then RH = (e/es) * 100, clamped to [0, 100].
 def rel_humidity_pct(temp_k, dew_k):
-    # RH from T and Td (Magnus approximation)
     t = to_celsius(temp_k) # درجة حرارة الهواء
     td = to_celsius(dew_k) # درجة حرارة الندى
     es = t.expression("6.112*exp((17.67*T)/(T+243.5))", {"T": t})
@@ -97,16 +59,12 @@ def rel_humidity_pct(temp_k, dew_k):
     rh = ee.Image(e).divide(es).multiply(100)
     return rh.clamp(0, 100)
 
-# ----------------------
-# FWI: FFMC (daily) + ISI
-# ----------------------
 def ffmc_next(ffmc_prev, T_c, RH, W_kmh, R_mm):
-    
+        
     """
     Compute next-day FFMC based on weather inputs
     (temperature, humidity, wind, rainfall).
     """
-
     # Ensure FFMC is within valid range
     ffmc_prev = ee.Image(ffmc_prev).clamp(0, 101)
 
@@ -269,221 +227,234 @@ def fwi_from_isi_bui(isi, bui):
     fwi = ee.Image(ee.Algorithms.If(B.lte(1), fwi_case1, fwi_case2))
     return fwi.max(0)
 
-# ----------------------
-# Build DAILY weather from ERA5-Land hourly
-# ----------------------
-era = (
-    ee.ImageCollection("ECMWF/ERA5_LAND/HOURLY")
-    .filterDate(START, END)
-    .filterBounds(AOI)
-)
 
-def daily_weather(date):
-    date = ee.Date(date)
 
-    # Take 09 UTC (≈ 12 PM KSA UTC+3)
-    img = (era
-           .filterDate(date, date.advance(1, "day"))
-           .filter(ee.Filter.calendarRange(9, 9, "hour"))
-           .first())
+# Core compute
+def compute_fire_threat(lat: float, lon: float, when_iso: str):
+    AOI = ee.Geometry.Point([lon, lat]).buffer(BUFFER_M)
 
-    fallback = ee.Image.constant([273.15, 273.15, 0, 0, 0]).rename([
-        "temperature_2m",
-        "dewpoint_temperature_2m",
-        "u_component_of_wind_10m",
-        "v_component_of_wind_10m",
-        "total_precipitation"
-    ])
+    DAY = ee.Date(when_iso)
+    START = DAY
+    END = DAY.advance(1, "day")
 
-    img = ee.Image(ee.Algorithms.If(img, img, fallback))
+    # Fire Power (VIIRS FRP)
+    active_fire_collection = (
+        ee.ImageCollection("NASA/VIIRS/002/VNP14A1")
+        .filterDate(START, END)
+        .filterBounds(AOI)
+    )
 
-    T  = img.select("temperature_2m")
-    Td = img.select("dewpoint_temperature_2m")
-    RH = rel_humidity_pct(T, Td)
+    active_fire_img = ee.Image(active_fire_collection.max())
+    fire_mask = active_fire_img.select("FireMask").gte(7)
 
-    u = img.select("u_component_of_wind_10m")
-    v = img.select("v_component_of_wind_10m")
-    W = wind_speed_kmh(u, v)
-
-    # precipitation sum over the day (m -> mm)
-    pr = (era.select("total_precipitation")
-          .filterDate(date, date.advance(1, "day"))
-          .sum()
-          .multiply(1000))
-
-    out = (to_celsius(T).rename("T")
-           .addBands(RH.rename("RH"))
-           .addBands(W.rename("W"))
-           .addBands(pr.rename("R")))
-
-    return out.set("system:time_start", date.millis())
-
-# date sequence
-n_days = ee.Number(ee.Date(END).difference(ee.Date(START), "day")).toInt()
-dates = ee.List.sequence(0, n_days.subtract(1)).map(
-    lambda d: ee.Date(START).advance(ee.Number(d), "day")
-)
-daily = ee.ImageCollection(dates.map(daily_weather))
-
-# ----------------------
-# Iterate to compute FFMC, ISI, DMC, DC, BUI, FWI day-by-day
-# ----------------------
-FFMC0 = ee.Image.constant(85)  # typical start
-DMC0  = ee.Image.constant(6)
-DC0   = ee.Image.constant(15)
-
-def step(img, state):
-    state = ee.Dictionary(state)
-
-    ffmc_prev = ee.Image(state.get("ffmc"))
-    dmc_prev  = ee.Image(state.get("dmc"))
-    dc_prev   = ee.Image(state.get("dc"))
-
-    img = ee.Image(img)
-    T  = img.select("T")
-    RH = img.select("RH")
-    W  = img.select("W")
-    R  = img.select("R")
-
-    ffmc_today = ffmc_next(ffmc_prev, T, RH, W, R)
-    isi_today  = isi_from_ffmc_wind(ffmc_today, W)
-
-    dmc_today  = dmc_next(dmc_prev, T, RH, R)
-    dc_today   = dc_next(dc_prev, T, R)
-
-    bui_today  = bui_from_dmc_dc(dmc_today, dc_today)
-    fwi_today  = fwi_from_isi_bui(isi_today, bui_today)
-
-    out = (img
-           .addBands(ffmc_today.rename("FFMC"))
-           .addBands(dmc_today.rename("DMC"))
-           .addBands(dc_today.rename("DC"))
-           .addBands(bui_today.rename("BUI"))
-           .addBands(isi_today.rename("ISI"))
-           .addBands(fwi_today.rename("FWI")))
-
-    col = ee.ImageCollection(state.get("col")).merge(ee.ImageCollection([out]))
-    return ee.Dictionary({"ffmc": ffmc_today, "dmc": dmc_today, "dc": dc_today, "col": col})
-
-init = ee.Dictionary({"ffmc": FFMC0, "dmc": DMC0, "dc": DC0, "col": ee.ImageCollection([])})
-result_iter = ee.Dictionary(daily.sort("system:time_start").iterate(step, init))
-fwi_daily = ee.ImageCollection(result_iter.get("col"))
-
-# ----------------------
-# Slope modifier
-# ----------------------
-dem = ee.Image("USGS/SRTMGL1_003")
-slope = ee.Terrain.slope(dem)  # degrees
-slope_factor = slope.divide(45).clamp(0, 1).multiply(0.3).add(1.0)  # 1.0 to 1.3
-
-# pick DAY image from fwi_daily
-day_img = ee.Image(
-    fwi_daily.filterDate(DAY, DAY.advance(1, "day")).first()
-)
-
-# fail-safe if missing
-day_img = ee.Image(ee.Algorithms.If(day_img, day_img, ee.Image.constant([0,0,0,0,0,0]).rename(
-    ["T","RH","W","R","ISI","FWI"]
-)))
-
-isi_day_img = day_img.select("ISI")
-fwi_day_img = day_img.select("FWI")
-
-# Normalize (0..1) + slope modifier
-""" isi_norm = isi_day_img.divide(ISI_CAP).clamp(0, 1) """
-fwi_norm = fwi_day_img.divide(FWI_CAP).clamp(0, 1)
-
-spread_driver = fwi_norm
-spread_img = spread_driver.multiply(slope_factor).clamp(0, 1)
-spread_index = mean_in_aoi(spread_img, 500)
-
-# ======================
-# 6) Exposure (Population)
-# ======================
-population = (
-    ee.ImageCollection("WorldPop/GP/100m/pop")
-    .filterDate("2020-01-01", "2021-01-01")
-    .mean()
-)
-
-pop_mean = population.reduceRegion(
-    reducer=ee.Reducer.mean(),
-    geometry=AOI,
-    scale=100,
-    maxPixels=1e9
-).values().get(0)
-
-pop_mean = safe_number(pop_mean, 0)
-exposure = normalize(pop_mean, POP_MAX)
-
-# ======================
-# 7) Threat Score
-# ======================
-threat_score = (
-    fire_power.multiply(W_FIRE)
-    .add(spread_index.multiply(W_SPREAD))
-    .add(exposure.multiply(W_EXPOSURE))
-    .clamp(0, 1)
-)
-
-threat_level = ee.Algorithms.If(
-    threat_score.lt(0.33), "Low",
-    ee.Algorithms.If(threat_score.lt(0.66), "Medium", "High")
-)
-
-# ======================
-# 8) Output
-# ======================
-result = {
-    "AOI_center": (LON, LAT),
-    "date": DAY.format("YYYY-MM-dd").getInfo(),
-
-    "FRP_max_MW": frp_max.getInfo(),
-    "fire_power_norm": fire_power.getInfo(),
-
-    "ISI_day_mean_raw": mean_in_aoi(isi_day_img, 500).getInfo(),
-    "FWI_day_mean_raw": mean_in_aoi(fwi_day_img, 500).getInfo(),
-
-    "spread_index": spread_index.getInfo(),
-
-    "population_mean": pop_mean.getInfo(),
-    "exposure_norm": exposure.getInfo(),
-
-    "threat_score": threat_score.getInfo(),
-    "threat_level": threat_level.getInfo(),
-}
-
-print(" Fire Threat Result")
-for k, v in result.items():
-    print(f"{k}: {v}")
-
-# ======================
-# 9) Debug checks (fire present + FRP stats)
-# ======================
-fire_present = ee.Number(
-    active_fire_img.select("FireMask").gte(7).reduceRegion(
-        ee.Reducer.anyNonZero(),
-        AOI,
-        1000,
+    frp_max = active_fire_img.select("MaxFRP").updateMask(fire_mask).reduceRegion(
+        reducer=ee.Reducer.max(),
+        geometry=AOI,
+        scale=500,
         maxPixels=1e9
-    ).get("FireMask")
-)
+    ).get("MaxFRP")
 
-print("Fire present in AOI (0/1):", fire_present.getInfo())
+    frp_max = safe_number(frp_max, 0)
+    fire_power = normalize(frp_max, FRP_MAX)
 
-frp_max_dbg = active_fire_img.select("MaxFRP").updateMask(fire_mask).reduceRegion(
-    reducer=ee.Reducer.max(),
-    geometry=AOI,
-    scale=1000,
-    maxPixels=1e9
-).get("MaxFRP")
+    # Build DAILY weather (ERA5)
+    era = (
+        ee.ImageCollection("ECMWF/ERA5_LAND/HOURLY")
+        .filterDate(START, END)
+        .filterBounds(AOI)
+    )
 
-frp_mean_dbg = active_fire_img.select("MaxFRP").updateMask(fire_mask).reduceRegion(
-    reducer=ee.Reducer.mean(),
-    geometry=AOI,
-    scale=1000,
-    maxPixels=1e9
-).get("MaxFRP")
+    def daily_weather(date):
+        date = ee.Date(date)
 
-""" print("FRP max:", ee.Number(safe_number(frp_max_dbg, 0)).getInfo())
-print("FRP mean:", ee.Number(safe_number(frp_mean_dbg, 0)).getInfo()) """
+        img = (era
+               .filterDate(date, date.advance(1, "day"))
+               .filter(ee.Filter.calendarRange(9, 9, "hour"))
+               .first())
+
+        fallback = ee.Image.constant([273.15, 273.15, 0, 0, 0]).rename([
+            "temperature_2m",
+            "dewpoint_temperature_2m",
+            "u_component_of_wind_10m",
+            "v_component_of_wind_10m",
+            "total_precipitation"
+        ])
+
+        img = ee.Image(ee.Algorithms.If(img, img, fallback))
+
+        T  = img.select("temperature_2m")
+        Td = img.select("dewpoint_temperature_2m")
+        RH = rel_humidity_pct(T, Td)
+
+        u = img.select("u_component_of_wind_10m")
+        v = img.select("v_component_of_wind_10m")
+        W = wind_speed_kmh(u, v)
+
+        pr = (era.select("total_precipitation")
+              .filterDate(date, date.advance(1, "day"))
+              .sum()
+              .multiply(1000))
+
+        out = (to_celsius(T).rename("T")
+               .addBands(RH.rename("RH"))
+               .addBands(W.rename("W"))
+               .addBands(pr.rename("R")))
+
+        return out.set("system:time_start", date.millis())
+
+    n_days = ee.Number(ee.Date(END).difference(ee.Date(START), "day")).toInt()
+    dates = ee.List.sequence(0, n_days.subtract(1)).map(
+        lambda d: ee.Date(START).advance(ee.Number(d), "day")
+    )
+    daily = ee.ImageCollection(dates.map(daily_weather))
+
+    # ---- Iterate FWI
+    FFMC0 = ee.Image.constant(85)
+    DMC0  = ee.Image.constant(6)
+    DC0   = ee.Image.constant(15)
+
+    def step(img, state):
+        state = ee.Dictionary(state)
+
+        ffmc_prev = ee.Image(state.get("ffmc"))
+        dmc_prev  = ee.Image(state.get("dmc"))
+        dc_prev   = ee.Image(state.get("dc"))
+
+        img = ee.Image(img)
+        T  = img.select("T")
+        RH = img.select("RH")
+        W  = img.select("W")
+        R  = img.select("R")
+
+        ffmc_today = ffmc_next(ffmc_prev, T, RH, W, R)
+        isi_today  = isi_from_ffmc_wind(ffmc_today, W)
+
+        dmc_today  = dmc_next(dmc_prev, T, RH, R)
+        dc_today   = dc_next(dc_prev, T, R)
+
+        bui_today  = bui_from_dmc_dc(dmc_today, dc_today)
+        fwi_today  = fwi_from_isi_bui(isi_today, bui_today)
+
+        out = (img
+               .addBands(ffmc_today.rename("FFMC"))
+               .addBands(dmc_today.rename("DMC"))
+               .addBands(dc_today.rename("DC"))
+               .addBands(bui_today.rename("BUI"))
+               .addBands(isi_today.rename("ISI"))
+               .addBands(fwi_today.rename("FWI")))
+
+        col = ee.ImageCollection(state.get("col")).merge(ee.ImageCollection([out]))
+        return ee.Dictionary({"ffmc": ffmc_today, "dmc": dmc_today, "dc": dc_today, "col": col})
+
+    init = ee.Dictionary({"ffmc": FFMC0, "dmc": DMC0, "dc": DC0, "col": ee.ImageCollection([])})
+    result_iter = ee.Dictionary(daily.sort("system:time_start").iterate(step, init))
+    fwi_daily = ee.ImageCollection(result_iter.get("col"))
+
+    day_img = ee.Image(fwi_daily.filterDate(DAY, DAY.advance(1, "day")).first())
+
+    day_img = ee.Image(ee.Algorithms.If(
+        day_img,
+        day_img,
+        ee.Image.constant([0, 0, 0, 0, 0, 0]).rename(["T","RH","W","R","ISI","FWI"])
+    ))
+
+    isi_day_img = day_img.select("ISI")
+    fwi_day_img = day_img.select("FWI")
+
+    # ---- Slope modifier
+    dem = ee.Image("USGS/SRTMGL1_003")
+    slope = ee.Terrain.slope(dem)
+    slope_factor = slope.divide(45).clamp(0, 1).multiply(0.3).add(1.0)
+
+    fwi_norm = fwi_day_img.divide(FWI_CAP).clamp(0, 1)
+    spread_img = fwi_norm.multiply(slope_factor).clamp(0, 1)
+    spread_index = mean_in_aoi(spread_img, AOI, 500)
+
+    # ---- Exposure (WorldPop)
+    population = (
+        ee.ImageCollection("WorldPop/GP/100m/pop")
+        .filterDate("2020-01-01", "2021-01-01")
+        .mean()
+    )
+
+    pop_mean = population.reduceRegion(
+        reducer=ee.Reducer.mean(),
+        geometry=AOI,
+        scale=100,
+        maxPixels=1e9
+    ).values().get(0)
+
+    pop_mean = safe_number(pop_mean, 0)
+    exposure = normalize(pop_mean, POP_MAX)
+
+    # ---- Threat Score
+    threat_score = (
+        fire_power.multiply(W_FIRE)
+        .add(spread_index.multiply(W_SPREAD))
+        .add(exposure.multiply(W_EXPOSURE))
+        .clamp(0, 1)
+    )
+
+    threat_level = ee.Algorithms.If(
+        threat_score.lt(0.33), "منخفضة",
+        ee.Algorithms.If(threat_score.lt(0.66), "متوسطة", "عالية")
+    )
+
+    # ---- Debug fire present
+    fire_present = ee.Number(
+        active_fire_img.select("FireMask").gte(7).reduceRegion(
+            ee.Reducer.anyNonZero(),
+            AOI,
+            1000,
+            maxPixels=1e9
+        ).get("FireMask")
+    )
+
+    # ---- Output (JSON-ready)
+    result = {
+        "AOI_center": {"lon": lon, "lat": lat},
+        "date": DAY.format("YYYY-MM-dd").getInfo(),
+
+        "FRP_max_MW": frp_max.getInfo(),
+        "fire_power_norm": fire_power.getInfo(),
+
+        "ISI_day_mean_raw": mean_in_aoi(isi_day_img, AOI, 500).getInfo(),
+        "FWI_day_mean_raw": mean_in_aoi(fwi_day_img, AOI, 500).getInfo(),
+
+        "spread_index": spread_index.getInfo(),
+
+        "population_mean": pop_mean.getInfo(),
+        "exposure_norm": exposure.getInfo(),
+
+        "threat_score": threat_score.getInfo(),
+        "threat_level": threat_level.getInfo(),
+
+        "fire_present": fire_present.getInfo(),
+    }
+    print(result)
+
+    return result
+
+
+# ======================
+# Route يربطه بالفرونت
+# ======================
+@fire_threat_bp.route("/fire-threat", methods=["POST"])
+def fire_threat_route():
+    print(">>> fire-threat route HIT")  # ✅ لازم يطلع
+
+    data = request.get_json(silent=True) or {}
+    lat = data.get("lat")
+    lon = data.get("lon")
+    when_iso = data.get("datetime")
+
+    if lat is None or lon is None or not when_iso:
+        return jsonify({"error": "Missing lat/lon/datetime"}), 400
+
+    try:
+        out = compute_fire_threat(float(lat), float(lon), str(when_iso))
+        return jsonify(out), 200
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(">>> ERROR in fire-threat:\n", tb)  # ✅ لازم يطلع
+        return jsonify({"error": "calculation_failed", "details": str(e), "trace": tb}), 500
