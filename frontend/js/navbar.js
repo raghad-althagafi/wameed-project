@@ -16,8 +16,8 @@ class Navbar {
 
     // logout the user
     logout() {
-        localStorage.removeItem('currentUser');
-        window.location.href = '/'; // ✅ Flask route for home
+        localStorage.removeItem('currentUser'); //remove the user data from the localStorage
+        window.location.href = '../pages/home-page.html'; //redirect to homepage after logout
     }
 
     // generate the HTML structure of the navbar
@@ -28,8 +28,8 @@ class Navbar {
             <!-- when the user is logged in -->
             <div class="nav-buttons logged-in">
                 <!-- welcome message shown when user is logged in -->
-                <a href="/profile" class="welcome-link">  <!-- ✅ -->
-                    <img src="/assets/images/user-icon.svg" alt="Profile" class="navbar-user-icon"> <!-- ✅ -->
+                <a href="../pages/Profile.html" class="welcome-link">  <!-- ✅ -->
+                    <img src="../assets/images/user-icon.svg" alt="Profile" class="navbar-user-icon"> <!-- ✅ -->
                     <span class="welcome-text">أهلاً ${this.user.name}</span>
                 </a>
 
@@ -40,12 +40,12 @@ class Navbar {
             <!-- when the user is not loged in -->
             <div class="nav-buttons">
                 <!-- login button -->
-                <a href="/sign-in"> <!-- ✅ -->
+                <a href="sign-in.html"> <!-- ✅ -->
                     <button class="main-button btn-login">تسجيل الدخول</button>
                 </a>
 
                 <!-- signup button -->
-                <a href="/sign-up"> <!-- ✅ -->
+                <a href="sign-in.html"> <!-- ✅ -->
                     <button class="main-button btn-signup">إنشاء حساب</button>
                 </a>
             </div>
@@ -58,14 +58,14 @@ class Navbar {
                     <div class="nav-content">
 
                         <!-- website logo -->
-                        <img src="/assets/images/wameed logo Bar.svg" alt="Logo"> <!-- ✅ -->
+                        <img src="../assets/images/wameed logo Bar.svg" alt="Logo"> <!-- ✅ -->
 
                         <!-- navigation links -->
                         <ul class="nav-links">
-                            <li><a href="/" class="nav-link">الصفحة الرئيسية</a></li> <!-- ✅ -->
-                            <li><a href="/predicted" class="nav-link">التنبؤ بالحرائق</a></li> <!-- ✅ -->
-                            <li><a href="/detected" class="nav-link">رصد الحرائق</a></li> <!-- ✅ -->
-                            <li><a href="/#about" class="nav-link no-active">من نحن</a></li> <!-- ✅ -->
+                            <li><a href="../pages/home-page.html" class="nav-link">الصفحة الرئيسية</a></li> <!-- ✅ -->
+                            <li><a href="../pages/PredictedFires.html" class="nav-link">التنبؤ بالحرائق</a></li> <!-- ✅ -->
+                            <li><a href="../pages/DetectedFires.html" class="nav-link">رصد الحرائق</a></li> <!-- ✅ -->
+                            <li><a href="../pages/home-page.html#about" class="nav-link no-active">من نحن</a></li> <!-- ✅ -->
                         </ul>
 
                         <!-- login/ logout buttons section -->
@@ -89,15 +89,14 @@ class Navbar {
 
     //highlight the active navbar link
     setActiveLink() {
-        const currentPath = window.location.pathname;
+        const currentPath = window.location.pathname.split('/').pop() || 'home-page.html';
 
+         //loop through all navbar links
         document.querySelectorAll('.nav-link').forEach(link => {
-            // عشان زر من نحن ما يتفعل
-            if (link.classList.contains('no-active')) return;
+            const linkPage = link.getAttribute('href').split('/').pop(); //get page filename
+            
 
-            const linkPath = link.getAttribute('href');
-
-            if (linkPath === currentPath) {
+            if (linkPath === currentPage) {
                 link.classList.add('active');
             }
         });
@@ -108,6 +107,7 @@ class Navbar {
 //global navbar instance
 let navbar;
 
+//create the navbar object when the page finishes loading
 document.addEventListener('DOMContentLoaded', () => {
     navbar = new Navbar();
 });
