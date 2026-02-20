@@ -13,28 +13,11 @@ predictions_bp = Blueprint("predictions_bp", __name__, url_prefix="/api/predicti
 @predictions_bp.route("", methods=["GET"])  # GET للاختبار وجلب البيانات
 def api_get_predictions():
 
-    user_id = request.args.get("user_id", "F5OiRsaaIVCYhbzOyAt3")  
+    user_id = request.args.get("user_id", "F5OiRsaaIVCYhbzOyAt3")
     # قراءة user_id من الرابط (GET)
 
-    return jsonify(get_user_predictions(user_id))  
+    return jsonify(get_user_predictions(user_id))
     # استدعاء الفنكشن وإرجاع النتيجة كـ JSON
-
-
-@predictions_bp.route("", methods=["POST"])  # POST لإرسال البيانات
-def api_save_prediction():
-
-    body = request.get_json(silent=True) or {}  
-    # قراءة JSON body (لو فاضي يرجع dict فاضي)
-
-    user_id = body.get("user_id", "F5OiRsaaIVCYhbzOyAt3")  # استخراج user_id
-    area_name = body.get("area_name", "")  # اسم المنطقة
-    lat = float(body.get("lat"))  # استخراج خط العرض
-    lng = float(body.get("lng"))  # استخراج خط الطول
-    is_predicted = bool(body.get("is_predicted", False))  # هل هو تنبؤ
-    predicted_at = body.get("predicted_at")  # قراءة الوقت بصيغة ISO
-
-    return jsonify(save_prediction(user_id, area_name, lat, lng, is_predicted, predicted_at))  
-    # إرسال البيانات لفنكشن الحفظ وإرجاع النتيجة
 
 
 # ---------- DATA FUNCTIONS ----------
@@ -49,7 +32,7 @@ def get_user_predictions(user_id: str):
         db.collection(PRED_COLLECTION)
           .where("User_ID", "==", user_id)
           .stream()
-    ) 
+    )
     # from collection return all documents that "User_ID", "==", user_id
     # stream is an iterator over returned documents
 
@@ -75,22 +58,3 @@ def get_user_predictions(user_id: str):
         results.append(data)
 
     return results
-
-
-def save_prediction(user_id: str, area_name: str, lat: float, lng: float, is_predicted: bool, predicted_at_iso: str):
-
-    db = FirebaseConnection.get_db() # get Firebase Connection
-
-    doc = {
-        "User_ID": user_id,
-        "Area_name": area_name,
-        "latitude": lat,
-        "longitude": lng,
-        "is_Predicted": bool(is_predicted),
-        "predicted_at": predicted_at_iso,
-    }
-
-    ref = db.collection(PRED_COLLECTION).document() # create new document
-    ref.set(doc) # save data
-
-    return {"id": ref.id, **doc} # return data with id
