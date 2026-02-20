@@ -246,31 +246,7 @@
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        // Add markers for detections
-        const currentDay = new Date().toISOString().split('T')[0]; // the date of current day
-        // history of detections for the user
-        const detections = [
-            { name: 'الرياض', lat: 24.7136, lng: 46.6753, fire: true, date: '2026-02-11', time: '09:14' },
-            { name: 'مكة المكرمة', lat: 21.3891, lng: 39.8579, fire: false, date: '2026-02-03', time: '09:14' },
-            { name: 'الدمام', lat: 26.4207, lng: 50.0888, fire: true, date: '2026-01-27', time: '09:14' }
-        ];
-
-        detections.forEach(dect => { // loop to each detection item
-            // display marker on map only if detection item date match the current day date
-            if (dect.date === currentDay) { 
-                // initalize the marker on map which it's name icon
-                // if the dect.fire = true the marker would be red, if dect.fire = false it would be green
-                const icon = L.divIcon({
-                    className: 'custom-marker',
-                    html: `<div style="background-color: ${dect.fire ? '#E43411' : '#5cb85c'}; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>`,
-                    iconSize: [20, 20]
-                });
-                // L indicate leaflet library
-                // add the marker on map at dect.lat, dect.lng
-                // and it has the style of icon varible
-                L.marker([dect.lat, dect.lng], { icon: icon }).addTo(map);
-            }
-        });
+        
 
         // function to create detection item in HTML list
         function renderDetectionItem(dect) {
@@ -299,7 +275,7 @@
                 button.textContent = 'التفاصيل'; // text of button
 
                 button.onclick = function() { // when details button clicked
-                    window.location.href = 'Details.html'; // navigate to details page
+                    window.location.href = `Details.html?fire_id=${encodeURIComponent(dect.id)}`; // navigate to details page
                 };
 
                 item.appendChild(button); // add button to item
@@ -307,34 +283,116 @@
 
             return item; // return the created element
         }
+        //---------------------------------------------------
+        // =========================
+        // Load detections from backend (Firestore عبر Flask)
+        // =========================
+        const USER_ID = "F5OiRsaaIVCYhbzOyAt3";
+        const API_BASE = "http://127.0.0.1:5000"; // عدّلي لو بورت Flask مختلف
+        const currentDay = new Date().toISOString().split('T')[0];
 
-        // split detections into today's detections and previous detections
-        const todayDetections = detections.filter(dect => dect.date === currentDay); // list for today
-        const previousDetections = detections.filter(dect => dect.date !== currentDay); // list for previous
+        const todayMarkers = [];
 
-        // get the containers from HTML
-        const todayContainer = document.getElementById('todayDetections'); // container for today list
-        const previousContainer = document.getElementById('previousDetections'); // container for previous list
+        function toDateParts(iso) {
+            if (!iso) {
+                const now = new Date();
+                return {
+                    date: now.toISOString().split('T')[0],
+                    time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
+                };
+            }
+            const d = new Date(iso);
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, "0");
+            const dd = String(d.getDate()).padStart(2, "0");
+            const hh = String(d.getHours()).padStart(2, "0");
+            const mi = String(d.getMinutes()).padStart(2, "0");
+            return { date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${mi}` };
+        }
 
-        // if there are no detections for today, show a message
-        if (todayDetections.length === 0) {
-            todayContainer.innerHTML = `<div class="detection-date">لا توجد عمليات رصد لليوم</div>`;
-        } else {
-            // render today's detections in its container
+        // ✅ عدّلي هنا فقط إذا أسماء حقول Firestore مختلفة
+        function mapRowToDetection(row) {
+            const iso = row.detected_at || null;
+            const parts = toDateParts(iso);
+
+            return {
+                id: row.id,                   // doc id
+                name: row.Area_name || "منطقة غير معروفة",
+                lat: row.latitude,
+                lng: row.longitude,
+                fire: !!row.is_detected,
+                date: parts.date,
+                time: parts.time
+            };
+        }
+
+        function clearTodayMarkers() {
+            todayMarkers.forEach(m => map.removeLayer(m));
+            todayMarkers.length = 0;
+        }
+
+        function addTodayMarkers(todayDetections) {
+            clearTodayMarkers();
+
             todayDetections.forEach(dect => {
-                todayContainer.appendChild(renderDetectionItem(dect)); // add item to today list
+                const icon = L.divIcon({
+                    className: 'custom-marker',
+                    html: `<div style="background-color: ${dect.fire ? '#E43411' : '#5cb85c'}; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>`,
+                    iconSize: [20, 20]
+                });
+
+                const marker = L.marker([dect.lat, dect.lng], { icon }).addTo(map);
+                todayMarkers.push(marker);
             });
         }
 
-        // if there are no previous detections, show a message
-        if (previousDetections.length === 0) {
-            previousContainer.innerHTML = `<div class="detection-date">لا توجد عمليات رصد سابقة</div>`;
-        } else {
-            // render previous detections in its container
-            previousDetections.forEach(dect => {
-                previousContainer.appendChild(renderDetectionItem(dect)); // add item to previous list
-            });
+        function renderDetectionLists(detections) {
+            const todayContainer = document.getElementById('todayDetections');
+            const previousContainer = document.getElementById('previousDetections');
+
+            todayContainer.innerHTML = "";
+            previousContainer.innerHTML = "";
+
+            const todayDetections = detections.filter(d => d.date === currentDay);
+            const previousDetections = detections.filter(d => d.date !== currentDay);
+
+            if (todayDetections.length === 0) {
+                todayContainer.innerHTML = `<div class="detection-date">لا توجد عمليات رصد لليوم</div>`;
+            } else {
+                todayDetections.forEach(d => todayContainer.appendChild(renderDetectionItem(d)));
+            }
+
+            if (previousDetections.length === 0) {
+                previousContainer.innerHTML = `<div class="detection-date">لا توجد عمليات رصد سابقة</div>`;
+            } else {
+                previousDetections.forEach(d => previousContainer.appendChild(renderDetectionItem(d)));
+            }
+
+            addTodayMarkers(todayDetections);
         }
+
+        async function loadDetectionsFromBackend() {
+            try {
+                const url = `${API_BASE}/api/detections?user_id=F5OiRsaaIVCYhbzOyAt3`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                const rows = await res.json();
+                const detections = (rows || []).map(mapRowToDetection);
+                renderDetectionLists(detections);
+            } catch (err) {
+                const todayContainer = document.getElementById('todayDetections');
+                const previousContainer = document.getElementById('previousDetections');
+                todayContainer.innerHTML = `<div class="detection-date">تعذر تحميل الرصد (تأكدي أن Flask يعمل وأن CORS مفعّل)</div>`;
+                previousContainer.innerHTML = ``;
+                console.error(err);
+            }
+        }
+
+        // تحميل أول ما الصفحة تفتح
+        loadDetectionsFromBackend();
+
+        //---------------------------------------------------
 
         
         let popupMap; // represent the map inside popup window
