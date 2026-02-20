@@ -1,12 +1,8 @@
 import os
 from flask import Flask #import Flask calss from flask library
 from flask_cors import CORS
-# ------------- for data retrival------------------
-from flask import request, jsonify
-from Data.predicted_fire_data import get_user_predictions
-from Data.predicted_fire_data import save_prediction
-from Data.detected_fire_data import get_user_detections
-# ------------- for data retrival------------------
+from Data.predicted_fire_data import predictions_bp
+from Data.detected_fire_data import detections_bp
 
 # ----------------- PAGES ROUTES ------------------
 # from flask import render_template
@@ -38,34 +34,9 @@ app.register_blueprint(fire_spread_bluePrint)
 app.register_blueprint(fire_threat_bp)
 app.register_blueprint(test_gee_bp)
 
-#-----------------------------------------------
+app.register_blueprint(predictions_bp)
+app.register_blueprint(detections_bp)
 
-@app.route("/api/predictions", methods=["GET"])
-def api_get_predictions():
-    user_id = request.args.get("user_id", "F5OiRsaaIVCYhbzOyAt3")
-    return jsonify(get_user_predictions(user_id))
-
-
-
-@app.route("/api/predictions", methods=["POST"])
-def api_save_prediction():
-    body = request.get_json(silent=True) or {}
-    user_id = body.get("user_id", "F5OiRsaaIVCYhbzOyAt3")
-    area_name = body.get("area_name", "")
-    lat = float(body.get("lat"))
-    lng = float(body.get("lng"))
-    is_predicted = bool(body.get("is_predicted", False))
-    predicted_at = body.get("predicted_at")  # ISO string
-
-    return jsonify(save_prediction(user_id, area_name, lat, lng, is_predicted, predicted_at))
-
-
-@app.route("/api/detections", methods=["GET"])
-def api_get_detections():
-    user_id = request.args.get("user_id", "F5OiRsaaIVCYhbzOyAt3")
-    return jsonify(get_user_detections(user_id))
-
-#-----------------------------------------------
 
 if __name__ == "__main__":
     app.run(debug=True)

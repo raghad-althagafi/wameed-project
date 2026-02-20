@@ -291,40 +291,46 @@
         const API_BASE = "http://127.0.0.1:5000"; // عدّلي لو بورت Flask مختلف
         const currentDay = new Date().toISOString().split('T')[0];
 
+        // (اختياري) نخزن ماركرز اليوم عشان نمسحها عند إعادة التحميل
         const todayMarkers = [];
 
         function toDateParts(iso) {
             if (!iso) {
                 const now = new Date();
                 return {
-                    date: now.toISOString().split('T')[0],
-                    time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
+                date: now.toISOString().split('T')[0],
+                time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
                 };
             }
-            const d = new Date(iso);
+
+            // يحذف المايكروثواني لو موجودة (.561000)
+            const cleaned = String(iso).replace(/\.\d+/, "");
+            const d = new Date(cleaned);
+
             const yyyy = d.getFullYear();
             const mm = String(d.getMonth() + 1).padStart(2, "0");
             const dd = String(d.getDate()).padStart(2, "0");
             const hh = String(d.getHours()).padStart(2, "0");
             const mi = String(d.getMinutes()).padStart(2, "0");
-            return { date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${mi}` };
-        }
 
-        // ✅ عدّلي هنا فقط إذا أسماء حقول Firestore مختلفة
-        function mapRowToDetection(row) {
+            return { date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${mi}` };
+            }
+
+            // ✅ مطابق 100% لأسماء الحقول عندك
+            function mapRowToDetection(row) {
             const iso = row.detected_at || null;
             const parts = toDateParts(iso);
 
             return {
-                id: row.id,                   // doc id
-                name: row.Area_name || "منطقة غير معروفة",
-                lat: row.latitude,
-                lng: row.longitude,
-                fire: !!row.is_detected,
+                id: row.id,                 // doc id من الباك اند
+                name: row.Area_name,        // "عسير"
+                lat: row.latitude,          // 20.8783
+                lng: row.longitude,         // -156.6825
+                fire: !!row.is_detected,    // true/false
                 date: parts.date,
                 time: parts.time
             };
-        }
+            }
 
         function clearTodayMarkers() {
             todayMarkers.forEach(m => map.removeLayer(m));
@@ -346,7 +352,7 @@
             });
         }
 
-        function renderDetectionLists(detections) {
+        function renderLists(detections) {
             const todayContainer = document.getElementById('todayDetections');
             const previousContainer = document.getElementById('previousDetections');
 
@@ -373,13 +379,14 @@
 
         async function loadDetectionsFromBackend() {
             try {
-                const url = `${API_BASE}/api/detections?user_id=F5OiRsaaIVCYhbzOyAt3`;
+                const url = `${API_BASE}/api/detections?user_id=${encodeURIComponent(USER_ID)}`;
                 const res = await fetch(url);
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
                 const rows = await res.json();
                 const detections = (rows || []).map(mapRowToDetection);
-                renderDetectionLists(detections);
+
+                renderLists(detections);
             } catch (err) {
                 const todayContainer = document.getElementById('todayDetections');
                 const previousContainer = document.getElementById('previousDetections');
@@ -389,7 +396,7 @@
             }
         }
 
-        // تحميل أول ما الصفحة تفتح
+        // شغلي التحميل أول ما الصفحة تفتح
         loadDetectionsFromBackend();
 
         //---------------------------------------------------
