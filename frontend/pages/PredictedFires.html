@@ -439,14 +439,72 @@
         }
 
         // function called when  user select 'تحديد' button
-        function definePrediction() {
-            if (selectedCoordinations) { // if selectedCoordinations has value so then the user has select the coordinations
-                alert(`تم تحديد الموقع: ${selectedCoordinations.lat.toFixed(1)}, ${selectedCoordinations.lng.toFixed(1)}`); // inform the user that it has been selected and show the coordinations, and show one number after the point
-                closePopup(); // then close the popup window
-            } else { // if the user has not select the coordinations yet
+        async function definePrediction() {
+
+            if (!selectedCoordinations) {
                 alert('الرجاء تحديد موقع على الخريطة');
+                return;
             }
-        }
+            // نحاول نجيب اسم الموقع من OpenStreetMap
+            let areaName = "موقع غير معروف";
+
+            try {
+                const geoRes = await fetch(
+                    `https://nominatim.openstreetmap.org/reverse?format=json&accept-language=ar&lat=${selectedCoordinations.lat}&lon=${selectedCoordinations.lng}`
+                );
+
+                const geoData = await geoRes.json();
+
+                if (geoData.address) {
+                    areaName =
+                        geoData.address.city ||
+                        geoData.address.town ||
+                        geoData.address.village ||
+                        geoData.address.county ||
+                        geoData.address.state ||
+                        "موقع محدد";
+
+                }
+
+            } catch (e) {
+                console.log("لم يتم جلب اسم الموقع");
+            }
+
+            try {
+
+                const payload = {
+                    user_id: USER_ID,
+                    lat: selectedCoordinations.lat,
+                    lng: selectedCoordinations.lng,
+                    area_name: areaName
+                };
+
+                const res = await fetch(`${API_BASE}/api/predictions`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                }
+
+                const data = await res.json();
+
+                alert("تم حفظ طلب التنبؤ بنجاح");
+
+                closePopup();
+
+                // إعادة تحميل القائمة بعد الحفظ
+                loadPredictionsFromBackend();
+
+            } catch (error) {
+                console.error(error);
+                alert("حدث خطأ أثناء حفظ التنبؤ");
+            }
+    }
     </script>
 </body>
 </html>
