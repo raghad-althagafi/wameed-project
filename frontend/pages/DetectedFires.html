@@ -283,84 +283,87 @@
 
             return item; // return the created element
         }
-        //---------------------------------------------------
-        // =========================
-        // Load detections from backend (Firestore عبر Flask)
-        // =========================
-        const USER_ID = "F5OiRsaaIVCYhbzOyAt3";
-        const API_BASE = "http://127.0.0.1:5000"; // عدّلي لو بورت Flask مختلف
-        const currentDay = new Date().toISOString().split('T')[0];
+        // ----------- Load detections for user from backend DB ----------------
+        const USER_ID = "F5OiRsaaIVCYhbzOyAt3"; // User ID
+        const API_BASE = "http://127.0.0.1:5000"; // flask URL
+        const currentDay = new Date().toISOString().split('T')[0]; // date for today in normal format
 
-        // (اختياري) نخزن ماركرز اليوم عشان نمسحها عند إعادة التحميل
+        // array for today markers on map
         const todayMarkers = [];
 
+        // function to convert date and time in ISO format 
         function toDateParts(iso) {
-            if (!iso) {
+            if (!iso) { // if ISO is null
                 const now = new Date();
-                return {
+                return { 
                 date: now.toISOString().split('T')[0],
                 time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
                 };
             }
-
-            // يحذف المايكروثواني لو موجودة (.561000)
             const cleaned = String(iso).replace(/\.\d+/, "");
             const d = new Date(cleaned);
 
-            const yyyy = d.getFullYear();
-            const mm = String(d.getMonth() + 1).padStart(2, "0");
-            const dd = String(d.getDate()).padStart(2, "0");
-            const hh = String(d.getHours()).padStart(2, "0");
-            const mi = String(d.getMinutes()).padStart(2, "0");
+            const yyyy = d.getFullYear(); //get year
+            const mm = String(d.getMonth() + 1).padStart(2, "0"); //get month, add 1 cause months from 0-11
+            const dd = String(d.getDate()).padStart(2, "0"); //get day
+            const hh = String(d.getHours()).padStart(2, "0"); //get hour
+            const mi = String(d.getMinutes()).padStart(2, "0"); //get minutes
 
+            // return date and time object in correct format
             return { date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${mi}` };
             }
 
-            // ✅ مطابق 100% لأسماء الحقول عندك
+            // unifie data from backend
             function mapRowToDetection(row) {
-            const iso = row.detected_at || null;
-            const parts = toDateParts(iso);
+            const iso = row.detected_at || null; // detected_at which is date, time in ISO format
+            const parts = toDateParts(iso); // convert ISO into normal format
 
+            // return detection data
             return {
-                id: row.id,                 // doc id من الباك اند
-                name: row.Area_name,        // "عسير"
-                lat: row.latitude,          // 20.8783
-                lng: row.longitude,         // -156.6825
-                fire: !!row.is_detected,    // true/false
+                id: row.id,
+                name: row.Area_name,
+                lat: row.latitude,
+                lng: row.longitude,
+                fire: !!row.is_detected,
                 date: parts.date,
                 time: parts.time
             };
             }
 
+        // claar today makeres from map
+        // to prevent reputation of markers whenever page is refreshed
         function clearTodayMarkers() {
-            todayMarkers.forEach(m => map.removeLayer(m));
+            todayMarkers.forEach(m => map.removeLayer(m)); // remover today markeres from array
             todayMarkers.length = 0;
         }
-
+         // function to add today markers on map
         function addTodayMarkers(todayDetections) {
             clearTodayMarkers();
 
             todayDetections.forEach(dect => {
                 const icon = L.divIcon({
                     className: 'custom-marker',
+                    // if dect.fire == true marker would be red, if its false marker would be green
                     html: `<div style="background-color: ${dect.fire ? '#E43411' : '#5cb85c'}; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>`,
                     iconSize: [20, 20]
-                });
+                }); // create icon
 
-                const marker = L.marker([dect.lat, dect.lng], { icon }).addTo(map);
-                todayMarkers.push(marker);
+                const marker = L.marker([dect.lat, dect.lng], { icon }).addTo(map); // add marker to map
+                todayMarkers.push(marker); // push marker for today markers array
             });
         }
 
+        // function to organize detections to Today / previous
         function renderLists(detections) {
             const todayContainer = document.getElementById('todayDetections');
             const previousContainer = document.getElementById('previousDetections');
 
+             // make them clear
             todayContainer.innerHTML = "";
             previousContainer.innerHTML = "";
 
-            const todayDetections = detections.filter(d => d.date === currentDay);
-            const previousDetections = detections.filter(d => d.date !== currentDay);
+            const todayDetections = detections.filter(d => d.date === currentDay); // filter today detections
+            const previousDetections = detections.filter(d => d.date !== currentDay); // filter previous detections
 
             if (todayDetections.length === 0) {
                 todayContainer.innerHTML = `<div class="detection-date">لا توجد عمليات رصد لليوم</div>`;
@@ -374,18 +377,23 @@
                 previousDetections.forEach(d => previousContainer.appendChild(renderDetectionItem(d)));
             }
 
+            // add markers for today detections
             addTodayMarkers(todayDetections);
         }
 
+        // function that load detections from Backend
         async function loadDetectionsFromBackend() {
             try {
-                const url = `${API_BASE}/api/detections?user_id=${encodeURIComponent(USER_ID)}`;
-                const res = await fetch(url);
+                //encodeURIComponent to ensure USER_ID appear correctly in URL
+                const url = `${API_BASE}/api/detections?user_id=${encodeURIComponent(USER_ID)}`; // build the URL
+                const res = await fetch(url); // send request to server, and wait for response
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                // if not successful throw new error to catch
 
-                const rows = await res.json();
-                const detections = (rows || []).map(mapRowToDetection);
+                const rows = await res.json(); // convert response to JSON
+                const detections = (rows || []).map(mapRowToDetection); // check every row to ensure it appear proberly
 
+                // display detections in the page
                 renderLists(detections);
             } catch (err) {
                 const todayContainer = document.getElementById('todayDetections');
@@ -396,7 +404,7 @@
             }
         }
 
-        // شغلي التحميل أول ما الصفحة تفتح
+        // load detections when page is loadeed
         loadDetectionsFromBackend();
 
         //---------------------------------------------------

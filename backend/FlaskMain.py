@@ -1,7 +1,6 @@
-import os
 from flask import Flask #import Flask calss from flask library
 from flask_cors import CORS
-from Data.predicted_fire_data import predictions_bp
+from Data.predicted_fire_data import predictions_bp 
 from Data.detected_fire_data import detections_bp
 
 # ----------------- PAGES ROUTES ------------------
@@ -28,8 +27,7 @@ CORS(app)
 
 GEEConnection.get_instance() # initalize google earth engine connection once turning on the server, so whenever connection needed after that it will be returned
 
-#register the routes in BluePrints
-# app.register_blueprint(pages_bp)
+#register BluePrints
 app.register_blueprint(fire_spread_bluePrint)
 app.register_blueprint(fire_threat_bp)
 app.register_blueprint(test_gee_bp)

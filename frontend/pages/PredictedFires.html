@@ -274,113 +274,132 @@
             return item; // return the created prediction item
         }
 
-        // =========================
-        // Load predictions from backend (Firestore عبر Flask)
-        // =========================
-        const USER_ID = "F5OiRsaaIVCYhbzOyAt3";
-        const API_BASE = "http://127.0.0.1:5000"; // عدّلي لو بورت Flask مختلف
-        const currentDay = new Date().toISOString().split('T')[0];
+        
+        // ----------- Load predictions for user from backend DB ----------------
+        
+        const USER_ID = "F5OiRsaaIVCYhbzOyAt3"; // User ID
+        const API_BASE = "http://127.0.0.1:5000"; // flask URL
+        const currentDay = new Date().toISOString().split('T')[0]; // date for today in normal format
 
-        // (اختياري) نخزن ماركرز اليوم عشان نمسحها عند إعادة التحميل
+        // array for today markers on map
         const todayMarkers = [];
 
+        // function to convert date and time in ISO format 
         function toDateParts(iso) {
-            if (!iso) {
-                const now = new Date();
-                return {
-                    date: now.toISOString().split('T')[0],
-                    time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
-                };
+            if (!iso || isNaN(new Date(iso))) { // if ISO is null, isNaN invalid date
+                console.warn("Invalid or missing date:", iso);
+                return { date: "-", time: "-" }; // return -
             }
-            const d = new Date(iso);
-            const yyyy = d.getFullYear();
-            const mm = String(d.getMonth() + 1).padStart(2, "0");
-            const dd = String(d.getDate()).padStart(2, "0");
-            const hh = String(d.getHours()).padStart(2, "0");
-            const mi = String(d.getMinutes()).padStart(2, "0");
-            return { date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${mi}` };
+
+            const d = new Date(iso); // convert it Date Object
+            // padStart(2, "0") to make it 2 digits
+            const yyyy = d.getFullYear(); //get year
+            const mm = String(d.getMonth() + 1).padStart(2, "0"); //get month, add 1 cause months from 0-11
+            const dd = String(d.getDate()).padStart(2, "0"); //get day
+            const hh = String(d.getHours()).padStart(2, "0"); //get hour
+            const mi = String(d.getMinutes()).padStart(2, "0"); //get minutes
+
+            // return date and time object in correct format
+            return {
+                date: `${yyyy}-${mm}-${dd}`,
+                time: `${hh}:${mi}`
+            };
         }
 
-        // عدّلي هنا فقط إذا أسماء حقولك في Firestore مختلفة
+        // unifie data from backend
         function mapRowToPrediction(row) {
-            const iso = row.predicted_at || row.datetime || row.created_at || null;
-            const parts = toDateParts(iso);
+            const iso = row.predicted_at; // predicted_at which is date, time in ISO format
+            const parts = toDateParts(iso); // convert ISO into normal format
 
+            // return prediction data
             return {
-                name: row.Area_name || row.area_name || row.name || 'منطقة غير معروفة',
-                lat: row.latitude ?? row.lat,
-                lng: row.Longitude ?? row.longitude ?? row.lng,
-                fire: !!(row.is_Predicted ?? row.is_predicted ?? row.fire),
+                name: row.Area_name || 'منطقة غير معروفة',
+                lat: row.latitude,
+                lng: row.Longitude,
+                fire: row.is_Predicted === true,
                 date: parts.date,
                 time: parts.time
             };
         }
-
+        
+        // claar today makeres from map
+        // to prevent reputation of markers whenever page is refreshed
         function clearTodayMarkers() {
-            todayMarkers.forEach(m => map.removeLayer(m));
+            todayMarkers.forEach(m => map.removeLayer(m)); // remover today markeres from array
             todayMarkers.length = 0;
         }
 
+        // function to add today markers on map
         function addTodayMarkers(todayPredictions) {
-            clearTodayMarkers();
+            clearTodayMarkers(); // clear today markers
 
+            // loop for today precidtiond
             todayPredictions.forEach(pred => {
                 const icon = L.divIcon({
                     className: 'custom-marker',
+                    // if pred.fire == true marker would be red, if its false marker would be green
                     html: `<div style="background-color: ${pred.fire ? '#E43411' : '#5cb85c'}; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>`,
                     iconSize: [20, 20]
-                });
+                }); // create icon
 
-                const marker = L.marker([pred.lat, pred.lng], { icon }).addTo(map);
-                todayMarkers.push(marker);
+                const marker = L.marker([pred.lat, pred.lng], { icon }).addTo(map); // add marker to map
+                todayMarkers.push(marker); // push marker for today markers array
             });
         }
 
+        // function to organize predictions to Today / previous
         function renderLists(predictions) {
-            const todayContainer = document.getElementById('todayPredictions');
-            const previousContainer = document.getElementById('previousPredictions');
+            const todayContainer = document.getElementById('todayPredictions'); // coniatiner for today
+            const previousContainer = document.getElementById('previousPredictions'); // coniatiner for previous
 
+            // make them clear
             todayContainer.innerHTML = "";
             previousContainer.innerHTML = "";
 
-            const todayPredictions = predictions.filter(p => p.date === currentDay);
-            const previousPredictions = predictions.filter(p => p.date !== currentDay);
+            const todayPredictions = predictions.filter(p => p.date === currentDay); // filter today predictions
+            const previousPredictions = predictions.filter(p => p.date !== currentDay); // filter previous pridctions
 
-            if (todayPredictions.length === 0) {
+            if (todayPredictions.length === 0) { // if there is no predictions for today
                 todayContainer.innerHTML = `<div class="prediction-date">لا توجد تنبؤات لليوم</div>`;
-            } else {
-                todayPredictions.forEach(p => todayContainer.appendChild(renderPredictionItem(p)));
+            } else { // if there are predictions for today
+                todayPredictions.forEach(p => todayContainer.appendChild(renderPredictionItem(p))); // append today precitions in continer
             }
 
-            if (previousPredictions.length === 0) {
+            if (previousPredictions.length === 0) { // if there are no previous predictions
                 previousContainer.innerHTML = `<div class="prediction-date">لا توجد تنبؤات سابقة</div>`;
-            } else {
-                previousPredictions.forEach(p => previousContainer.appendChild(renderPredictionItem(p)));
+            } else { // if there are previous predictions
+                previousPredictions.forEach(p => previousContainer.appendChild(renderPredictionItem(p))); // append previous precitions in continer
             }
 
+            // add markers for today predictions
             addTodayMarkers(todayPredictions);
         }
 
+        // function that load predictions from Backend
         async function loadPredictionsFromBackend() {
             try {
-                const url = `${API_BASE}/api/predictions?user_id=${encodeURIComponent(USER_ID)}`;
-                const res = await fetch(url);
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                //encodeURIComponent to ensure USER_ID appear correctly in URL
+                const url = `${API_BASE}/api/predictions?user_id=${encodeURIComponent(USER_ID)}`; // build the URL
+                const res = await fetch(url); // send request to server, and wait for response
+                
+                if (!res.ok) throw new Error(`HTTP ${res.status}`); // check if response was successful
+                // if not successful throw new error to catch
 
-                const rows = await res.json();
-                const predictions = (rows || []).map(mapRowToPrediction);
+                const rows = await res.json(); // convert response to JSON
+                const predictions = (rows || []).map(mapRowToPrediction); // check every row to ensure it appear proberly
 
+                // display predictions in the page
                 renderLists(predictions);
             } catch (err) {
                 const todayContainer = document.getElementById('todayPredictions');
                 const previousContainer = document.getElementById('previousPredictions');
-                todayContainer.innerHTML = `<div class="prediction-date">تعذر تحميل التنبؤات (تأكدي أن Flask يعمل وأن CORS مفعّل)</div>`;
-                previousContainer.innerHTML = ``;
+                todayContainer.innerHTML = `<div class="prediction-date">تعذر تحميل التنبؤات</div>`; // problem from flask or CORS
+                previousContainer.innerHTML = `<div class="prediction-date">تعذر تحميل التنبؤات</div>`;
                 console.error(err);
             }
         }
 
-        // شغلي التحميل أول ما الصفحة تفتح
+        // load predictions when page is loadeed
         loadPredictionsFromBackend();
 
         
