@@ -4,7 +4,7 @@ import traceback
 
 fire_threat_bp = Blueprint("fire_threat", __name__)
 
-BUFFER_M = 500  # buffer around point (meters) بعدين بغيرها ****************************
+BUFFER_M = 500  
 
 # Normalization caps
 FRP_MAX = 200.0
@@ -31,7 +31,7 @@ def mean_in_aoi(img, aoi, scale, default=0):
         scale=scale,
         maxPixels=1e9
     ).values().get(0)
-    return safe_number(val, default)   # ✅ تمنع null
+    return safe_number(val, default)  
 
 
 # Helpers: units + RH
@@ -385,7 +385,6 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
         ee.Image.constant([0, 0, 0, 0, 0, 0]).rename(["T","RH","W","R","ISI","FWI"])
     ))
 
-    isi_day_img = day_img.select("ISI")
     fwi_day_img = day_img.select("FWI")
 
     # ---- Slope modifier
@@ -427,38 +426,11 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
         ee.Algorithms.If(threat_score.lt(0.66), "متوسطة", "عالية")
     )
 
-    # ---- Debug fire present
-    fire_present = ee.Number(
-        active_fire_img.select("FireMask").gte(7).reduceRegion(
-            ee.Reducer.anyNonZero(),
-            AOI,
-            1000,
-            maxPixels=1e9
-        ).get("FireMask")
-    )
-
     # ---- Output (JSON-ready)
     result = {
-        "AOI_center": {"lon": lon, "lat": lat},
-        "date": DAY.format("YYYY-MM-dd").getInfo(),
-
-        "FRP_max_MW": frp_max.getInfo(),
-        "fire_power_norm": fire_power.getInfo(),
-
-        "ISI_day_mean_raw": mean_in_aoi(isi_day_img, AOI, 500).getInfo(),
-        "FWI_day_mean_raw": mean_in_aoi(fwi_day_img, AOI, 500).getInfo(),
-
-        "spread_index": spread_index.getInfo(),
-
-        "population_mean": pop_mean.getInfo(),
-        "exposure_norm": exposure.getInfo(),
-
         "threat_score": threat_score.getInfo(),
         "threat_level": threat_level.getInfo(),
-
-        "fire_present": fire_present.getInfo(),
     }
-    print(result)
 
     return result
 
