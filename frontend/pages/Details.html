@@ -3,10 +3,12 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- the width of page match the width of the device, initial scale of page when its loading -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- the width of page match the width of the device, initial scale of page when its loading -->
     <title>التفاصيل - وميض</title> <!-- title of page -->
     <link rel="stylesheet" href="../css/wameed.css"> <!-- import shared css file -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" /> <!-- import library for interactive maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- import library for interactive maps -->
 
     <!-- Material Icons (for share icon) -->
     <link rel="stylesheet"
@@ -95,7 +97,8 @@
 
         /* Map Container Styles */
         #map {
-            flex: 2; /* Map takes 2/3 of the width */
+            flex: 2;
+            /* Map takes 2/3 of the width */
             width: 100%;
             height: 450px;
             border-radius: 10px;
@@ -116,7 +119,8 @@
 
         /* PDF Button Styles */
         .pdf-btn {
-            background-color: var(--primary-color); /* Uses variable from wameed.css */
+            background-color: var(--primary-color);
+            /* Uses variable from wameed.css */
             color: white;
             padding: 16px 70px;
             border: none;
@@ -124,7 +128,8 @@
             font-size: 24px;
             font-weight: 700;
             cursor: pointer;
-            font-family: var(--font-main); /* Uses main font variable */
+            font-family: var(--font-main);
+            /* Uses main font variable */
             box-shadow: 0 4px 12px rgba(228, 52, 17, 0.25);
             transition: all 0.3s ease;
             display: flex;
@@ -134,8 +139,10 @@
 
         /* Hover effect */
         .pdf-btn:hover {
-            background-color: #FB7047; /* Hover color */
-            transform: translateY(-2px); /* Slight lift effect */
+            background-color: #FB7047;
+            /* Hover color */
+            transform: translateY(-2px);
+            /* Slight lift effect */
             box-shadow: 0 6px 16px rgba(236, 90, 47, 0.35);
         }
 
@@ -182,7 +189,8 @@
             font-size: 14px;
             font-weight: 700;
             cursor: pointer;
-            margin-right: 8px; /* because RTL */
+            margin-right: 8px;
+            /* because RTL */
             position: relative;
             user-select: none;
         }
@@ -254,6 +262,98 @@
                 margin-top: 4px;
             }
         }
+
+        /* Modal (popup) */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.35);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal {
+            width: min(560px, 92vw);
+            background: #fff;
+            border-radius: 16px;
+            padding: 18px;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+            direction: rtl;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .modal-close {
+            border: none;
+            background: transparent;
+            font-size: 28px;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .weight-row {
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .weight-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 8px;
+        }
+
+        .weight-controls input[type="range"] {
+            width: 100%;
+        }
+
+        .sum-row {
+            margin-top: 12px;
+            font-size: 14px;
+            color: #444;
+        }
+
+        #sumWarn {
+            color: #b00020;
+            font-weight: 700;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+
+        .weights-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 8px 18px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            margin-top: 14px;
+        }
+
+        .weights-btn:hover {
+            background-color: #FB7047;
+            transform: translateY(-1px);
+        }
     </style>
 </head>
 
@@ -294,15 +394,19 @@
             <div class="card">
                 <div class="label">شدة الحريق المقدرة</div>
                 <div class="value" id="threatLevel">جاري الحساب...</div>
+                <button id="openWeightsBtn" class="weights-btn">
+                    تخصيص الأوزان
+                </button>
             </div>
             <div class="card">
-            <div class="label">
-             اتجاه الحريق المقدر
-                <span class="info-icon" onclick="toggleInfo(this)">i
-                <span class="info-tooltip">تم تقدير اتجاه الحريق اعتمادًا على بيانات الرياح وميل الأرض في موقع الرصد.</span>
-                </span>
-            </div>
-            <div class="value" id="spreadDir">جاري الحساب...</div>
+                <div class="label">
+                    اتجاه الحريق المقدر
+                    <span class="info-icon" onclick="toggleInfo(this)">i
+                        <span class="info-tooltip">تم تقدير اتجاه الحريق اعتمادًا على بيانات الرياح وميل الأرض في موقع
+                            الرصد.</span>
+                    </span>
+                </div>
+                <div class="value" id="spreadDir">جاري الحساب...</div>
             </div>
 
             <div class="card">
@@ -341,7 +445,57 @@
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
+    <!-- Weights Modal -->
+    <div id="weightsModal" class="modal-overlay" aria-hidden="true">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="label" style="margin:0;">تخصيص أهمية العوامل</div>
+                <button id="closeWeightsBtn" class="modal-close" aria-label="إغلاق">×</button>
+            </div>
+
+            <div class="modal-body">
+                <div class="weight-row">
+                    <label>أهمية قوة الحريق</label>
+                    <div class="weight-controls">
+                        <input type="range" id="fireWeight" min="10" max="80" step="5" value="40">
+                        <span id="fireWeightVal">40%</span>
+                    </div>
+                </div>
+
+                <div class="weight-row">
+                    <label>أهمية الانتشار</label>
+                    <div class="weight-controls">
+                        <input type="range" id="spreadWeight" min="10" max="80" step="5" value="30">
+                        <span id="spreadWeightVal">30%</span>
+                    </div>
+                </div>
+
+                <div class="weight-row">
+                    <label>أهمية التعرض السكاني</label>
+                    <div class="weight-controls">
+                        <input type="range" id="exposureWeight" min="10" max="80" step="5" value="30">
+                        <span id="exposureWeightVal">30%</span>
+                    </div>
+                </div>
+
+                <div class="sum-row">
+                    المجموع: <span id="weightsSum">100%</span>
+                    <span id="sumWarn" style="display:none;">— لازم يكون 100%</span>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button id="applyWeightsBtn" class="pdf-btn" style="padding:12px 24px; font-size:18px;">
+                    تطبيق وإعادة الحساب
+                </button>
+                <button id="resetWeightsBtn" class="share-btn"
+                    style="padding:12px 24px; font-size:18px; background:#777;">
+                    إعادة ضبط
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // 1. Get URL Parameters (Data sent from the previous page)
         const params = new URLSearchParams(window.location.search);
@@ -410,69 +564,169 @@
         }
 
 
-    // ------------ Spread Direction --------------------
+        // ------------ Spread Direction --------------------
 
-    // ------ temporary values for testing --------------
-    const tempLat = 20.8783;
-    const tempLng = -156.6825;
-    const tempDate = "2023-08-09";
-    const tempTime = "00:55";
+        // ------ temporary values for testing --------------
+        const tempLat = 20.8783;
+        const tempLng = -156.6825;
+        const tempDate = "2023-08-09";
+        const tempTime = "00:55";
 
-    // convert date time into ISO 
-    const whenIso = `${tempDate}T${tempTime}:00Z`;
+        // convert date time into ISO 
+        const whenIso = `${tempDate}T${tempTime}:00Z`;
 
-    // ----------- function for calling backend to calculate spread direction ------------
-    async function loadSpreadDirection() {
-        try {
-            const res = await fetch("http://127.0.0.1:5000/fire-spread-direction", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ // send coordinations, date, time values
-                    lat: tempLat,
-                    lon: tempLng,
-                    datetime: whenIso
-                })
-            });
+        // ===== Default Weights (used immediately) =====
+        const DEFAULT_W = { fire: 0.40, spread: 0.30, exposure: 0.30 };
+        let currentW = { ...DEFAULT_W };
 
-            const data = await res.json(); // get response from backend
+        // ===== Modal Elements =====
+        const modal = document.getElementById("weightsModal");
+        const openBtn = document.getElementById("openWeightsBtn");
+        const closeBtn = document.getElementById("closeWeightsBtn");
+        const applyBtn = document.getElementById("applyWeightsBtn");
+        const resetBtn = document.getElementById("resetWeightsBtn");
 
-            // display the result 
-            document.getElementById("spreadDir").textContent =
-                data.spread_direction_ar || "غير متوفر";
+        const fireSlider = document.getElementById("fireWeight");
+        const spreadSlider = document.getElementById("spreadWeight");
+        const exposureSlider = document.getElementById("exposureWeight");
 
-        } catch (err) { // if an error happend in calculations 
-            console.error(err);
-            document.getElementById("spreadDir").textContent = "خطأ في الحساب";
+        const fireVal = document.getElementById("fireWeightVal");
+        const spreadVal = document.getElementById("spreadWeightVal");
+        const exposureVal = document.getElementById("exposureWeightVal");
+
+        const weightsSum = document.getElementById("weightsSum");
+        const sumWarn = document.getElementById("sumWarn");
+
+        function openModal() {
+            modal.classList.add("show");
+            modal.setAttribute("aria-hidden", "false");
         }
-    }
-    loadFireThreat();
-
-    loadSpreadDirection(); // call the function
-
-    // --------- Fire threat ---------
-    async function loadFireThreat() {
-        try {
-            const res = await fetch("http://127.0.0.1:5000/fire-threat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    lat: tempLat,
-                    lon: tempLng,
-                    datetime: whenIso
-                })
-            });
-
-            const fireThreat = await res.json();  
-            console.log("status:", res.status);
-            console.log("fireThreat:", fireThreat);       
-            document.getElementById("threatLevel").textContent =
-                fireThreat.threat_level ?? "غير متوفر";
-
-        } catch (err) {
-            console.error(err);
-            document.getElementById("threatLevel").textContent = "خطأ في الحساب";
+        function closeModal() {
+            modal.classList.remove("show");
+            modal.setAttribute("aria-hidden", "true");
         }
-    }
+
+        // تحديث عرض القيم
+        function updateSliderUI() {
+            fireVal.textContent = fireSlider.value + "%";
+            spreadVal.textContent = spreadSlider.value + "%";
+            exposureVal.textContent = exposureSlider.value + "%";
+
+            const s = Number(fireSlider.value) + Number(spreadSlider.value) + Number(exposureSlider.value);
+            weightsSum.textContent = s + "%";
+            sumWarn.style.display = (s === 100) ? "none" : "inline";
+        }
+
+        // خلّي السلايدرات تمثل currentW عند فتح المودال
+        function syncSlidersFromCurrent() {
+            fireSlider.value = Math.round(currentW.fire * 100);
+            spreadSlider.value = Math.round(currentW.spread * 100);
+            exposureSlider.value = Math.round(currentW.exposure * 100);
+            updateSliderUI();
+        }
+
+        // Events
+        openBtn?.addEventListener("click", () => { syncSlidersFromCurrent(); openModal(); });
+        closeBtn?.addEventListener("click", closeModal);
+        modal?.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
+
+        fireSlider?.addEventListener("input", updateSliderUI);
+        spreadSlider?.addEventListener("input", updateSliderUI);
+        exposureSlider?.addEventListener("input", updateSliderUI);
+
+        resetBtn?.addEventListener("click", () => {
+            currentW = { ...DEFAULT_W };
+            syncSlidersFromCurrent();
+        });
+
+        // تطبيق الأوزان + إعادة حساب
+        applyBtn?.addEventListener("click", async () => {
+            const s = Number(fireSlider.value) + Number(spreadSlider.value) + Number(exposureSlider.value);
+            if (s !== 100) {
+                alert("لازم يكون مجموع الأوزان 100%");
+                return;
+            }
+
+            currentW = {
+                fire: Number(fireSlider.value) / 100,
+                spread: Number(spreadSlider.value) / 100,
+                exposure: Number(exposureSlider.value) / 100
+            };
+
+            closeModal();
+            await loadFireThreat(); // يعيد الحساب مباشرة
+        });
+
+
+        function updateValues() {
+            fireVal.textContent = fireSlider.value + "%";
+            spreadVal.textContent = spreadSlider.value + "%";
+            exposureVal.textContent = exposureSlider.value + "%";
+        }
+
+        fireSlider.oninput = updateValues;
+        spreadSlider.oninput = updateValues;
+        exposureSlider.oninput = updateValues;
+
+        updateValues();
+
+        // ----------- function for calling backend to calculate spread direction ------------
+        async function loadSpreadDirection() {
+            try {
+                const res = await fetch("http://127.0.0.1:5000/fire-spread-direction", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ // send coordinations, date, time values
+                        lat: tempLat,
+                        lon: tempLng,
+                        datetime: whenIso
+                    })
+                });
+
+                const data = await res.json(); // get response from backend
+
+                // display the result 
+                document.getElementById("spreadDir").textContent =
+                    data.spread_direction_ar || "غير متوفر";
+
+            } catch (err) { // if an error happend in calculations 
+                console.error(err);
+                document.getElementById("spreadDir").textContent = "خطأ في الحساب";
+            }
+        }
+        loadFireThreat();
+
+
+        loadSpreadDirection(); // call the function
+
+        // --------- Fire threat ---------
+        async function loadFireThreat() {
+            try {
+                const res = await fetch("http://127.0.0.1:5000/fire-threat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        lat: tempLat,
+                        lon: tempLng,
+                        datetime: whenIso,
+                        w_fire: currentW.fire,
+                        w_spread: currentW.spread,
+                        w_exposure: currentW.exposure
+                    })
+                });
+
+                const fireThreat = await res.json();
+                console.log("status:", res.status);
+                console.log("fireThreat:", fireThreat);
+                document.getElementById("threatLevel").textContent =
+                    fireThreat.threat_level ?? "غير متوفر";
+
+            } catch (err) {
+                console.error(err);
+                document.getElementById("threatLevel").textContent = "خطأ في الحساب";
+            }
+        }
+
 
 
 
@@ -484,7 +738,7 @@
             const googleMapsUrl = `https://www.google.com/maps?q=${latFixed},${lngFixed}`;
 
             const text =
-`📍 موقع الحريق - وميض
+                `📍 موقع الحريق - وميض
 المنطقة: ${regionName}
 Latitude: ${latFixed}
 Longitude: ${lngFixed}

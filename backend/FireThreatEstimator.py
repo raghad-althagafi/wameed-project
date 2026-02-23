@@ -1,10 +1,8 @@
 from flask import Blueprint, request, jsonify
 import ee
 import traceback
-""" from Singleton.gee_connection import GEEConnection """
 
 fire_threat_bp = Blueprint("fire_threat", __name__)
-""" ee = GEEConnection.get_instance().get_ee() """
 
 BUFFER_M = 500  # buffer around point (meters) بعدين بغيرها ****************************
 
@@ -13,7 +11,7 @@ FRP_MAX = 200.0
 POP_MAX = 500.0
 FWI_CAP = 50.0
 
-#Weights
+# Weights
 W_FIRE = 0.25
 W_SPREAD = 0.35
 W_EXPOSURE = 0.40
@@ -34,7 +32,6 @@ def mean_in_aoi(img, aoi, scale, default=0):
         maxPixels=1e9
     ).values().get(0)
     return safe_number(val, default)   # ✅ تمنع null
-
 
 
 # Helpers: units + RH
@@ -141,31 +138,58 @@ def isi_from_ffmc_wind(ffmc, W_kmh):
 # ----------------------
 # DMC / DC / BUI / FWI (SAFE EE ops)
 # ----------------------
-def dmc_next(dmc_prev, T, RH, R):
-    dmc_prev = ee.Image(dmc_prev)
-    T = ee.Image(T)
-    RH = ee.Image(RH)
-    R = ee.Image(R)
+def dmc_next(dmc_prev, T_c, RH, R_mm, month_num):
+    P0 = ee.Image(dmc_prev)
+    T  = ee.Image(T_c)
+    H  = ee.Image(RH)
+    R  = ee.Image(R_mm)
 
+   
+    T = T.max(-1.1)
+
+
+    EL = ee.List([6.5, 7.5, 9.0, 12.8, 13.9, 13.9, 12.4, 10.9, 9.4, 8.0, 7.0, 6.0])
+    Le = ee.Number(EL.get(ee.Number(month_num).subtract(1)))  # month_num is 1..12
+    Le_img = ee.Image.constant(Le)
+
+    # K = 1.894 (T + 1.1) (100 - H) Le * 10^-6
+    K = ee.Image.constant(1.894).multiply(T.add(1.1)).multiply(ee.Image.constant(100).subtract(H)).multiply(Le_img).multiply(1e-6)
+
+    # --- Rain routine only if r0 > 1.5 mm
+    rain_event = R.gt(1.5)
+
+    #  re = 0.92 r0 - 1.27
     re = R.multiply(0.92).subtract(1.27).max(0)
 
-    mo = dmc_prev.expression(
-        "20 + exp(5.6348 - D/43.43)",
-        {"D": dmc_prev}
+    #  Mo = 20 + exp(5.6348 - P0/43.43)
+    Mo = P0.expression("20 + exp(5.6348 - P/43.43)", {"P": P0})
+
+    #  b piecewise based on P0
+    b_13a = P0.expression("100/(0.5 + 0.3*P)", {"P": P0})               # P0 <= 33
+    b_13b = P0.expression("14 - 1.3*log(P)", {"P": P0})                # 33 < P0 <= 65
+    b_13c = P0.expression("6.2*log(P) - 17.2", {"P": P0})              # P0 > 65
+
+    b = ee.Image(
+        ee.Algorithms.If(
+            P0.lte(33), b_13a,
+            ee.Algorithms.If(P0.lte(65), b_13b, b_13c)
+        )
     )
 
-    mr = mo.add(re.multiply(1000).divide(re.add(48.77)))
+    #  Mr = Mo + 1000 re / (48.77 + b re)
+    Mr = Mo.add(re.multiply(1000).divide(ee.Image.constant(48.77).add(b.multiply(re))))
 
-    dmc_rain = mr.expression(
-        "43.43*(5.6348 - log(mr - 20))",
-        {"mr": mr}
-    )
+    #  Pr = 244.72 - 43.43 ln(Mr - 20)
+    Pr = Mr.expression("244.72 - 43.43*log(Mr - 20)", {"Mr": Mr})
 
-    dmc_no_rain = dmc_prev.add(
-        T.multiply(0.1).multiply(ee.Image.constant(100).subtract(RH)).divide(100)
-    )
+    #  Pr cannot be < 0 => raise negatives to 0
+    Pr = Pr.max(0)
 
-    return ee.Image(ee.Algorithms.If(R.gt(1.5), dmc_rain, dmc_no_rain)).max(0)
+    #  P = (P0 or Pr) + 100K
+    P_base = ee.Image(ee.Algorithms.If(rain_event, Pr, P0))
+    P = P_base.add(K.multiply(100))
+
+    return P.max(0)
 
 def dc_next(dc_prev, T, R):
     dc_prev = ee.Image(dc_prev)
@@ -228,9 +252,8 @@ def fwi_from_isi_bui(isi, bui):
     return fwi.max(0)
 
 
-
 # Core compute
-def compute_fire_threat(lat: float, lon: float, when_iso: str):
+def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_spread: float, w_exposure: float):
     AOI = ee.Geometry.Point([lon, lat]).buffer(BUFFER_M)
 
     DAY = ee.Date(when_iso)
@@ -300,7 +323,10 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str):
                .addBands(W.rename("W"))
                .addBands(pr.rename("R")))
 
-        return out.set("system:time_start", date.millis())
+        return out.set({
+    "system:time_start": date.millis(),
+    "month": date.get("month")  # 1..12
+        })
 
     n_days = ee.Number(ee.Date(END).difference(ee.Date(START), "day")).toInt()
     dates = ee.List.sequence(0, n_days.subtract(1)).map(
@@ -329,7 +355,8 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str):
         ffmc_today = ffmc_next(ffmc_prev, T, RH, W, R)
         isi_today  = isi_from_ffmc_wind(ffmc_today, W)
 
-        dmc_today  = dmc_next(dmc_prev, T, RH, R)
+        month_num = ee.Number(img.get("month"))
+        dmc_today  = dmc_next(dmc_prev, T, RH, R, month_num)
         dc_today   = dc_next(dc_prev, T, R)
 
         bui_today  = bui_from_dmc_dc(dmc_today, dc_today)
@@ -389,9 +416,9 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str):
 
     # ---- Threat Score
     threat_score = (
-        fire_power.multiply(W_FIRE)
-        .add(spread_index.multiply(W_SPREAD))
-        .add(exposure.multiply(W_EXPOSURE))
+        fire_power.multiply(w_fire)
+        .add(spread_index.multiply(w_spread))
+        .add(exposure.multiply(w_exposure))
         .clamp(0, 1)
     )
 
@@ -441,20 +468,36 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str):
 # ======================
 @fire_threat_bp.route("/fire-threat", methods=["POST"])
 def fire_threat_route():
-    print(">>> fire-threat route HIT")  # ✅ لازم يطلع
+    print(">>> fire-threat route HIT")
 
     data = request.get_json(silent=True) or {}
+
     lat = data.get("lat")
     lon = data.get("lon")
     when_iso = data.get("datetime")
 
+    # ---- user weights ----
+    def clamp(x, lo, hi):
+        return max(lo, min(hi, x))
+
+    w_fire = clamp(float(data.get("w_fire", W_FIRE)), 0.10, 1.0)
+    w_spread = clamp(float(data.get("w_spread", W_SPREAD)), 0.10, 1.0)
+    w_exposure = clamp(float(data.get("w_exposure", W_EXPOSURE)), 0.10, 1.0)
+
+    total = w_fire + w_spread + w_exposure
+    w_fire /= total
+    w_spread /= total
+    w_exposure /= total
+
+    # ---- validation ----
     if lat is None or lon is None or not when_iso:
         return jsonify({"error": "Missing lat/lon/datetime"}), 400
 
     try:
-        out = compute_fire_threat(float(lat), float(lon), str(when_iso))
+        out = compute_fire_threat(float(lat), float(lon), str(when_iso), w_fire, w_spread, w_exposure)
         return jsonify(out), 200
+
     except Exception as e:
         tb = traceback.format_exc()
-        print(">>> ERROR in fire-threat:\n", tb)  # ✅ لازم يطلع
-        return jsonify({"error": "calculation_failed", "details": str(e), "trace": tb}), 500
+        print(">>> ERROR in fire-threat:\n", tb)
+        return jsonify({"error": "calculation_failed"}), 500
