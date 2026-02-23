@@ -325,7 +325,7 @@
         }
 
         #sumWarn {
-            color: #b00020;
+            color: #cf1919;
             font-weight: 700;
         }
 
@@ -480,7 +480,7 @@
 
                 <div class="sum-row">
                     المجموع: <span id="weightsSum">100%</span>
-                    <span id="sumWarn" style="display:none;">— لازم يكون 100%</span>
+                    <span id="sumWarn" style="display:none;">يجب أن يكون مجموع الأوزان 100٪.</span>
                 </div>
             </div>
 
@@ -643,7 +643,7 @@
         applyBtn?.addEventListener("click", async () => {
             const s = Number(fireSlider.value) + Number(spreadSlider.value) + Number(exposureSlider.value);
             if (s !== 100) {
-                alert("لازم يكون مجموع الأوزان 100%");
+                alert("يجب أن يكون مجموع الأوزان 100٪.");
                 return;
             }
 
