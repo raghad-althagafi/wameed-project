@@ -398,7 +398,7 @@
             } catch (err) {
                 const todayContainer = document.getElementById('todayDetections');
                 const previousContainer = document.getElementById('previousDetections');
-                todayContainer.innerHTML = `<div class="detection-date">تعذر تحميل الرصد (تأكدي أن Flask يعمل وأن CORS مفعّل)</div>`;
+                todayContainer.innerHTML = `<div class="detection-date">تعذر تحميل الرصد</div>`;
                 previousContainer.innerHTML = ``;
                 console.error(err);
             }

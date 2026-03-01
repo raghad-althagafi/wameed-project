@@ -37,14 +37,14 @@ def spread_direction():
     dem = ee.Image("USGS/SRTMGL1_003")
     terrain = ee.Terrain.products(dem)
 
-    slope = terrain.select("slope").reduceRegion( 
+    slope = terrain.select("slope").reduceRegion(
         reducer=ee.Reducer.mean(),
         geometry=region,
         scale=30,
         bestEffort=True
     ).get("slope") # return the slope mean foe the region
 
-    aspect = terrain.select("aspect").reduceRegion( 
+    aspect = terrain.select("aspect").reduceRegion(
         reducer=ee.Reducer.mean(),
         geometry=region,
         scale=30,
@@ -53,43 +53,53 @@ def spread_direction():
 
     upslope = ee.Number(aspect).add(180).mod(360) # convert the aspect into upslope by adding 180 degree
 
-    # -------- wind from ERA5-LAND --------
-    wind = (ee.ImageCollection("ECMWF/ERA5_LAND/HOURLY")
-            .filterDate(t0, t1)
-            .select(["u_component_of_wind_10m", "v_component_of_wind_10m"])
-            .mean())
-
-    u = wind.select("u_component_of_wind_10m").reduceRegion(
-        reducer=ee.Reducer.mean(),
-        geometry=region,
-        scale=1000,
-        bestEffort=True
-    ).get("u_component_of_wind_10m") # get the u component for wind which reflect wind speed East/West
-
-    v = wind.select("v_component_of_wind_10m").reduceRegion(
-        reducer=ee.Reducer.mean(),
-        geometry=region,
-        scale=1000,
-        bestEffort=True
-    ).get("v_component_of_wind_10m") # get the v component for wind which reflect wind speed north/south
-
     # Fetch values from google earth engine into python
-    vals = ee.Dictionary({"slope": slope, "upslope": upslope, "u": u, "v": v}).getInfo()
+    vals = ee.Dictionary({"slope": slope, "upslope": upslope}).getInfo()
 
     # convert values into float
     slope_deg = float(vals.get("slope") or 0.0)
     upslope_deg = float(vals.get("upslope") or 0.0)
-    u_val = float(vals.get("u") or 0.0)
-    v_val = float(vals.get("v") or 0.0)
 
-    
+    # -------- wind from NOAA GFS0P25 --------
+    region_wind = point.buffer(15000).bounds() # convert it into bigger region for wind (better with coarse models)
+
+    gfs = ee.ImageCollection("NOAA/GFS0P25")
+
+    t_prev = t0.advance(-6, "hour") # take time window before the requested time because GFS updates every 6 hours
+
+    gfs_img = (gfs
+               .filter(ee.Filter.gte("forecast_time", t_prev.millis()))
+               .filter(ee.Filter.lte("forecast_time", t1.millis()))
+               .sort("forecast_time", False) # get the nearest time to the user datetime
+               .first())
+
+    u = ee.Image(gfs_img).select("u_component_of_wind_10m_above_ground").reduceRegion(
+        reducer=ee.Reducer.mean(),
+        geometry=region_wind,
+        scale=30000,
+        bestEffort=True
+    ).get("u_component_of_wind_10m_above_ground") # get the u component for wind which reflect wind speed East/West
+
+    v = ee.Image(gfs_img).select("v_component_of_wind_10m_above_ground").reduceRegion(
+        reducer=ee.Reducer.mean(),
+        geometry=region_wind,
+        scale=30000,
+        bestEffort=True
+    ).get("v_component_of_wind_10m_above_ground") # get the v component for wind which reflect wind speed north/south
+
+    # Fetch values from google earth engine into python
+    vals_wind = ee.Dictionary({"u": u, "v": v}).getInfo()
+
+    # convert values into float
+    u_val = float(vals_wind.get("u") or 0.0)
+    v_val = float(vals_wind.get("v") or 0.0)
+
     wind_to_deg = _norm_deg(math.degrees(math.atan2(u_val, v_val))) # wind direction
     wind_speed = math.sqrt(u_val*u_val + v_val*v_val) # wind speed
 
-    # calculate the diffrence between wind_to_deg and upslope_deg, 
+    # calculate the diffrence between wind_to_deg and upslope_deg,
     omega = math.radians(_norm_deg(wind_to_deg - upslope_deg)) # convert to radians for sin, cos later
 
-    
     D_w = wind_speed # wind factor
     D_s = math.tan(math.radians(slope_deg)) # slope factor
 
