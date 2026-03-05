@@ -251,90 +251,148 @@ def fwi_from_isi_bui(isi, bui):
     fwi = ee.Image(ee.Algorithms.If(B.lte(1), fwi_case1, fwi_case2))
     return fwi.max(0)
 
+def weather_at_when_era5(era_ic, aoi, when):
+
+    # ---- 1) get closest HOURLY snapshot around WHEN (± 2 hours) ----
+    # If you want stricter: ±1 hour, if you want safer: ±3 hours
+    win_start = when.advance(-2, "hour")
+    win_end   = when.advance( 2, "hour")
+
+    # Grab candidates
+    candidates = (era_ic
+                .filterBounds(aoi)
+                .filterDate(win_start, win_end))
+
+    # If no image found, fallback to a constant "safe" image
+    fallback = ee.Image.constant([273.15, 273.15, 0, 0, 0]).rename([
+        "temperature_2m",
+        "dewpoint_temperature_2m",
+        "u_component_of_wind_10m",
+        "v_component_of_wind_10m",
+        "total_precipitation"
+    ])
+
+    # Choose closest by minimizing |system:time_start - when|
+    def add_time_diff(img):
+        diff = ee.Number(img.get("system:time_start")).subtract(when.millis()).abs()
+        return img.set("time_diff", diff)
+
+    closest = ee.Image(
+        ee.Algorithms.If(
+            candidates.size().gt(0),
+            candidates.map(add_time_diff).sort("time_diff").first(),
+            fallback
+        )
+    )
+
+    # ---- 2) build variables ----
+    T_k  = closest.select("temperature_2m")
+    Td_k = closest.select("dewpoint_temperature_2m")
+    RH   = rel_humidity_pct(T_k, Td_k)                     # uses your helper
+    W    = wind_speed_kmh(closest.select("u_component_of_wind_10m"),
+                        closest.select("v_component_of_wind_10m"))  # your helper
+
+    # ---- 3) precipitation: last 24 hours BEFORE WHEN (mm) ----
+    pr24 = (era_ic.select("total_precipitation")
+            .filterBounds(aoi)
+            .filterDate(when.advance(-24, "hour"), when)
+            .sum()
+            .multiply(1000))  # ERA5 total_precipitation is meters -> mm
+
+    out = (to_celsius(T_k).rename("T")
+        .addBands(RH.rename("RH"))
+        .addBands(W.rename("W"))
+        .addBands(pr24.rename("R")))
+
+    return out
+
 
 # Core compute
 def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_spread: float, w_exposure: float):
     AOI = ee.Geometry.Point([lon, lat]).buffer(BUFFER_M)
 
-    DAY = ee.Date(when_iso)
-    START = DAY
-    END = DAY.advance(1, "day")
+    # ---------- Time setup ----------
+    WHEN = ee.Date(when_iso)
 
-    # Fire Power (VIIRS FRP)
+    # window (hours) for near-real-time fire sampling
+    START = WHEN.advance(-3, "hour")
+    END   = WHEN.advance( 3, "hour")
+
+    # day window for FWI daily value
+    DAY_START = ee.Date(WHEN.format("YYYY-MM-dd"))
+    DAY_END   = DAY_START.advance(1, "day")
+
     active_fire_collection = (
         ee.ImageCollection("NASA/VIIRS/002/VNP14A1")
-        .filterDate(START, END)
         .filterBounds(AOI)
+        .filterDate(DAY_START, DAY_END)
     )
 
-    active_fire_img = ee.Image(active_fire_collection.max())
+    active_fire_img = ee.Image(active_fire_collection.first())
+
+    # fire mask (7,8,9 = active fire)
     fire_mask = active_fire_img.select("FireMask").gte(7)
 
-    frp_max = active_fire_img.select("MaxFRP").updateMask(fire_mask).reduceRegion(
+    # FRP
+    frp_img = active_fire_img.select("MaxFRP").updateMask(fire_mask)
+
+    frp_max = frp_img.reduceRegion(
         reducer=ee.Reducer.max(),
         geometry=AOI,
-        scale=500,
+        scale=1000,
         maxPixels=1e9
     ).get("MaxFRP")
 
     frp_max = safe_number(frp_max, 0)
+
     fire_power = normalize(frp_max, FRP_MAX)
 
-    # Build DAILY weather (ERA5)
-    era = (
-        ee.ImageCollection("ECMWF/ERA5_LAND/HOURLY")
-        .filterDate(START, END)
-        .filterBounds(AOI)
-    )
+    # ---------- FWI spin-up (daily, 14 days before fire day) ----------
+    FWI_START = DAY_START.advance(-14, "day")
+    FWI_END   = DAY_END
 
-    def daily_weather(date):
+    era_ic = (ee.ImageCollection("ECMWF/ERA5_LAND/HOURLY")
+              .filterBounds(AOI)
+              .filterDate(FWI_START, FWI_END))
+
+    # Build DAILY weather collection for FWI: bands T/RH/W/R + property month
+    def daily_fwi_weather(date):
         date = ee.Date(date)
 
-        img = (era
-               .filterDate(date, date.advance(1, "day"))
-               .filter(ee.Filter.calendarRange(9, 9, "hour"))
-               .first())
+        # daily mean for T, Td, u, v (stable)
+        day_mean = era_ic.filterDate(date, date.advance(1, "day")).mean()
 
-        fallback = ee.Image.constant([273.15, 273.15, 0, 0, 0]).rename([
-            "temperature_2m",
-            "dewpoint_temperature_2m",
-            "u_component_of_wind_10m",
-            "v_component_of_wind_10m",
-            "total_precipitation"
-        ])
+        T_k  = day_mean.select("temperature_2m")
+        Td_k = day_mean.select("dewpoint_temperature_2m")
+        RH   = rel_humidity_pct(T_k, Td_k)
 
-        img = ee.Image(ee.Algorithms.If(img, img, fallback))
-
-        T  = img.select("temperature_2m")
-        Td = img.select("dewpoint_temperature_2m")
-        RH = rel_humidity_pct(T, Td)
-
-        u = img.select("u_component_of_wind_10m")
-        v = img.select("v_component_of_wind_10m")
+        u = day_mean.select("u_component_of_wind_10m")
+        v = day_mean.select("v_component_of_wind_10m")
         W = wind_speed_kmh(u, v)
 
-        pr = (era.select("total_precipitation")
-              .filterDate(date, date.advance(1, "day"))
-              .sum()
-              .multiply(1000))
+        # daily total precip (mm)
+        R = (era_ic.select("total_precipitation")
+             .filterDate(date, date.advance(1, "day"))
+             .sum()
+             .multiply(1000))
 
-        out = (to_celsius(T).rename("T")
+        out = (to_celsius(T_k).rename("T")
                .addBands(RH.rename("RH"))
                .addBands(W.rename("W"))
-               .addBands(pr.rename("R")))
+               .addBands(R.rename("R")))
 
         return out.set({
-    "system:time_start": date.millis(),
-    "month": date.get("month")  # 1..12
+            "system:time_start": date.millis(),
+            "month": date.get("month")  # 1..12
         })
 
-    n_days = ee.Number(ee.Date(END).difference(ee.Date(START), "day")).toInt()
+    n_days = ee.Number(FWI_END.difference(FWI_START, "day")).toInt()
     dates = ee.List.sequence(0, n_days.subtract(1)).map(
-        lambda d: ee.Date(START).advance(ee.Number(d), "day")
+        lambda d: ee.Date(FWI_START).advance(ee.Number(d), "day")
     )
-    daily = ee.ImageCollection(dates.map(daily_weather))
+    daily = ee.ImageCollection(dates.map(daily_fwi_weather))
 
-    # ---- Iterate FWI
+    # ---- Iterate FWI over DAILY collection ----
     FFMC0 = ee.Image.constant(85)
     DMC0  = ee.Image.constant(6)
     DC0   = ee.Image.constant(15)
@@ -356,11 +414,11 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
         isi_today  = isi_from_ffmc_wind(ffmc_today, W)
 
         month_num = ee.Number(img.get("month"))
-        dmc_today  = dmc_next(dmc_prev, T, RH, R, month_num)
-        dc_today   = dc_next(dc_prev, T, R)
+        dmc_today = dmc_next(dmc_prev, T, RH, R, month_num)
+        dc_today  = dc_next(dc_prev, T, R)
 
-        bui_today  = bui_from_dmc_dc(dmc_today, dc_today)
-        fwi_today  = fwi_from_isi_bui(isi_today, bui_today)
+        bui_today = bui_from_dmc_dc(dmc_today, dc_today)
+        fwi_today = fwi_from_isi_bui(isi_today, bui_today)
 
         out = (img
                .addBands(ffmc_today.rename("FFMC"))
@@ -377,8 +435,7 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
     result_iter = ee.Dictionary(daily.sort("system:time_start").iterate(step, init))
     fwi_daily = ee.ImageCollection(result_iter.get("col"))
 
-    day_img = ee.Image(fwi_daily.filterDate(DAY, DAY.advance(1, "day")).first())
-
+    day_img = ee.Image(fwi_daily.filterDate(DAY_START, DAY_END).first())
     day_img = ee.Image(ee.Algorithms.If(
         day_img,
         day_img,
