@@ -1,3 +1,5 @@
+import { logoutUser } from "./auth.js";
+
 //class for handles rendering and updating the navigation bar
 class Navbar {
     constructor() {
@@ -15,7 +17,13 @@ class Navbar {
     }
 
     // logout the user
-    logout() {
+    async logout() {
+        try {
+            await logoutUser(); // log out the current user
+        } catch (error) {
+            console.error(error);
+        }
+
         localStorage.removeItem('currentUser'); //remove the user data from the localStorage
         window.location.href = '../pages/home-page.html'; //redirect to homepage after logout
     }

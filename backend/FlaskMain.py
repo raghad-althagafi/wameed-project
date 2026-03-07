@@ -13,6 +13,7 @@ from Singleton.gee_connection import GEEConnection #import GEEConnection calss f
 from FireSpreadEstimator import fire_spread_bluePrint #import fire_spread_bluePrint from FireSpreadEstimator file
 from FireThreatEstimator import fire_threat_bp
 
+from routes.auth import auth_bp
 
 # ----------------- PAGES ROUTES ------------------
 # BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # backend/
@@ -23,7 +24,14 @@ from FireThreatEstimator import fire_threat_bp
 
 app = Flask(__name__) # create the server
 
-CORS(app)
+
+# enable CORS for API routes
+CORS(
+    app,
+    resources={r"/api/*": {"origins": "*"}},
+    allow_headers=["Content-Type", "Authorization"],
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+)
 
 GEEConnection.get_instance() # initalize google earth engine connection once turning on the server, so whenever connection needed after that it will be returned
 
@@ -35,6 +43,7 @@ app.register_blueprint(test_gee_bp)
 app.register_blueprint(predictions_bp)
 app.register_blueprint(detections_bp)
 
+app.register_blueprint(auth_bp)
 
 if __name__ == "__main__":
     app.run(debug=True)
