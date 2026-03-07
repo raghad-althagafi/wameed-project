@@ -203,6 +203,54 @@
             display: block;
         }
 
+        /* password strength container */
+        .password-strength {
+            display: none;
+            margin-top: 8px;
+        }
+
+        /* bar background */
+        .strength-bar {
+            width: 100%;
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        /* moving colored bar */
+        .strength-bar span {
+            display: block;
+            width: 0%;
+            height: 100%;
+            transition: width 0.3s ease;
+            border-radius: 4px;
+        }
+
+        /* weak password color */
+        .strength-weak {
+            background: #ff4d4f;
+        }
+
+        /* medium password color */
+        .strength-medium {
+            background: #f4b400;
+        }
+
+        /* strong password color */
+        .strength-strong {
+            background: #34a853;
+        }
+
+        /* hide the normal error text when showing password rules */
+        .form-container.password-rule-error .error-text {
+            display: none;
+        }
+
+        /* show password strength section when password rules are not complete */
+        .form-container.password-rule-error .password-strength {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -247,11 +295,18 @@
             </div>
 
             <!-- password -->
-            <div class="form-container">
+            <div class="form-container" id="passwordContainer">
                 <label class="form-label">كلمة المرور</label>
                 <div class="input-container">
                     <img class="input-icon" src="../assets/images/pass-icon.svg" alt="الباسوورد">
                     <input type="password" class="form-input" placeholder="كلمة المرور" id="password">
+                </div>
+                <!-- password validation -->
+                <div class="password-strength">
+                    <div class="strength-bar">
+                        <span></span>
+                    </div>
+                    <small class="strength-text"></small>
                 </div>
                 <small class="error-text">فضلًا أدخل كلمة المرور للمتابعة.</small>
             </div>
@@ -276,74 +331,252 @@
         </form>
     </div>
 <script>
-        //get the login form and listen for submit even
-        document.getElementById('signupForm').addEventListener('submit', function (e) {
-            
-            //prevent page reload when submitting the form
-            e.preventDefault();
+    // get the form element
+    const form = document.getElementById('signupForm');
 
-            //flag to check if there is any error
-            let hasError = false;
+    // get all input fields
+    const nameInput = document.getElementById('name');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const confirmPasswordInput = document.getElementById('confirmPassword');
 
-            //loop through all form input to validate empty fields
-            document.querySelectorAll('.form-container').forEach(container => {
-                //get the input
-                const input = container.querySelector('.form-input');
+    // get each input container to show or remove error styles
+    const emailContainer = emailInput.closest('.form-container');
+    const passwordContainer = document.getElementById('passwordContainer');
+    const confirmPasswordContainer = confirmPasswordInput.closest('.form-container');
+    const nameContainer = nameInput.closest('.form-container');
 
-                //show error style if the input is sempty
-                if (!input.value.trim()) {
-                    container.classList.add('error');
-                    hasError = true;
-                } else {
-                    //remove error style if filled
-                    container.classList.remove('error');
-                }
-            });
+    // get password strength bar and text
+    const strengthBar = passwordContainer.querySelector('.strength-bar span');
+    const strengthText = passwordContainer.querySelector('.strength-text');
 
-            //when the user types inside the confirm password field
-            document.getElementById('confirmPassword').addEventListener('input', () => {
-                //get the container of the confirmPassword
-                const container =
-                    document.getElementById('confirmPassword').closest('.form-container');
-                //remove the error styling when the user starts typing again
-                container.classList.remove('error');
-            });
+    // regex pattern for validating email format
+    const emailPattern = /^(?!.*\.\.)([A-Za-z0-9._%+-]+)@([A-Za-z0-9-]+)\.([A-Za-z]{2,})(\.[A-Za-z]{2,})*$/;
 
-            //stop the sign up process if any error exists
-            if (hasError) return;
+    // email live validation
+    emailInput.addEventListener('input', function () {
+        // get email value without spaces at beginning or end
+        const value = emailInput.value.trim();
 
-            //get values entered by the user
-            const name = document.getElementById('name').value.trim();
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('password').value;
-            const confirmPassword = document.getElementById('confirmPassword').value;
+        // if field is empty, remove error while typing
+        if (!value) {
+            emailContainer.classList.remove('error');
+            return;
+        }
 
-            //password match validation
-            if (password !== confirmPassword) {
-                //get the confirm password container
-                const confirmContainer =
-                    document.getElementById('confirmPassword').closest('.form-container');
+        // if email format is wrong, show error message
+        if (!emailPattern.test(value)) {
+            emailContainer.classList.add('error');
+            emailContainer.querySelector('.error-text').textContent =
+                'صيغة البريد الإلكتروني غير صحيحة';
+        } else {
+            // remove error if email becomes valid
+            emailContainer.classList.remove('error');
+        }
+    });
 
-                //add error styling
-                confirmContainer.classList.add('error');
-                confirmContainer.querySelector('.error-text').textContent =
-                    'كلمتا المرور غير متطابقتين';
+    
+    // password validation
+    passwordInput.addEventListener('input', function () {
+        // get password value without outside spaces
+        const value = passwordInput.value.trim();
 
-                return;
-            }
+        // check password conditions
+        const hasUpperLower = /[A-Z]/.test(value) && /[a-z]/.test(value); // must contain capital and small letter
+        const hasSpecial = /[^A-Za-z0-9]/.test(value); // must contain special character
+        const hasNumber = /[0-9]/.test(value); // must contain number
+        const hasLength = value.length >= 8; // must be at least 8 characters
 
-            //demo
-            const user = {
-                name: name,
-                email: email
-            };
+        // reset bar and text before applying new state
+        strengthBar.style.width = '0%';
+        strengthBar.className = '';
+        strengthText.textContent = '';
 
-            //save user data in localStorage
-            localStorage.setItem('currentUser', JSON.stringify(user));
+        // if password field is empty, hide error and bar while typing
+        if (!value) {
+            passwordContainer.classList.remove('error', 'password-rule-error');
+            return;
+        }
 
-            //redirect user to homepage after sign up
-            window.location.href = 'home-page.html';
-        });
+        // show password feedback in the same place as error message
+        passwordContainer.classList.add('error', 'password-rule-error');
+
+        // first condition: capital + small letter
+        if (!hasUpperLower) {
+            strengthBar.style.width = '25%';
+            strengthBar.className = 'strength-weak';
+            strengthText.textContent = 'يجب أن تحتوي كلمة المرور على حروف كبيرة وصغيرة';
+            strengthText.style.color = '#ff4d4f';
+            return;
+        }
+
+        // second condition: special character
+        if (!hasSpecial) {
+            strengthBar.style.width = '50%';
+            strengthBar.className = 'strength-medium';
+            strengthText.textContent = 'يجب أن تحتوي كلمة المرور على رمز خاص';
+            strengthText.style.color = '#f4b400';
+            return;
+        }
+
+        // third condition: number
+        if (!hasNumber) {
+            strengthBar.style.width = '75%';
+            strengthBar.className = 'strength-medium';
+            strengthText.textContent = 'يجب أن تحتوي كلمة المرور على رقم';
+            strengthText.style.color = '#f4b400';
+            return;
+        }
+
+        // fourth condition: minimum length 8
+        if (!hasLength) {
+            strengthBar.style.width = '90%';
+            strengthBar.className = 'strength-medium';
+            strengthText.textContent = 'يجب أن تتكون كلمة المرور من 8 أحرف على الأقل';
+            strengthText.style.color = '#f4b400';
+            return;
+        }
+
+        // if all conditions are true, show strong password
+        strengthBar.style.width = '100%';
+        strengthBar.className = 'strength-strong';
+        strengthText.textContent = 'كلمة المرور قوية';
+        strengthText.style.color = '#34a853';
+
+        // remove error style after short delay
+        setTimeout(() => {
+            passwordContainer.classList.remove('error', 'password-rule-error');
+        }, 500);
+    });
+
+    
+    // confirm password clear
+    confirmPasswordInput.addEventListener('input', () => {
+        // remove error style when user starts typing again
+        confirmPasswordContainer.classList.remove('error');
+    });
+
+    // form submit validation
+    form.addEventListener('submit', function (e) {
+        // stop page reload
+        e.preventDefault();
+
+        // flag to track if any validation error exists
+        let hasError = false;
+
+        // get all entered values
+        const name = nameInput.value.trim();
+        const email = emailInput.value.trim();
+        const password = passwordInput.value;
+        const confirmPassword = confirmPasswordInput.value;
+
+        // check password conditions again on submit
+        const hasUpperLower = /[A-Z]/.test(password) && /[a-z]/.test(password);
+        const hasSpecial = /[^A-Za-z0-9]/.test(password);
+        const hasNumber = /[0-9]/.test(password);
+        const hasLength = password.length >= 8;
+
+        // validate name
+        if (!name) {
+            nameContainer.classList.add('error');
+            hasError = true;
+        } else {
+            nameContainer.classList.remove('error');
+        }
+
+        // validate email
+        if (!email) {
+            emailContainer.classList.add('error');
+            emailContainer.querySelector('.error-text').textContent =
+                'البريد الإلكتروني مطلوب';
+            hasError = true;
+        } else if (!emailPattern.test(email)) {
+            emailContainer.classList.add('error');
+            emailContainer.querySelector('.error-text').textContent =
+                'صيغة البريد الإلكتروني غير صحيحة';
+            hasError = true;
+        } else {
+            emailContainer.classList.remove('error');
+        }
+
+        // validate password
+        if (!password.trim()) {
+            // password field is empty
+            passwordContainer.classList.add('error');
+            passwordContainer.classList.remove('password-rule-error');
+            hasError = true;
+        } else if (!hasUpperLower) {
+            // missing capital or small letters
+            passwordContainer.classList.add('error', 'password-rule-error');
+            strengthBar.style.width = '25%';
+            strengthBar.className = 'strength-weak';
+            strengthText.textContent = 'يجب أن تحتوي كلمة المرور على حروف كبيرة وصغيرة';
+            strengthText.style.color = '#ff4d4f';
+            hasError = true;
+        } else if (!hasSpecial) {
+            // missing special character
+            passwordContainer.classList.add('error', 'password-rule-error');
+            strengthBar.style.width = '50%';
+            strengthBar.className = 'strength-medium';
+            strengthText.textContent = 'يجب أن تحتوي كلمة المرور على رمز خاص';
+            strengthText.style.color = '#f4b400';
+            hasError = true;
+        } else if (!hasNumber) {
+            // missing number
+            passwordContainer.classList.add('error', 'password-rule-error');
+            strengthBar.style.width = '75%';
+            strengthBar.className = 'strength-medium';
+            strengthText.textContent = 'يجب أن تحتوي كلمة المرور على رقم';
+            strengthText.style.color = '#f4b400';
+            hasError = true;
+        } else if (!hasLength) {
+            // password length is less than 8
+            passwordContainer.classList.add('error', 'password-rule-error');
+            strengthBar.style.width = '90%';
+            strengthBar.className = 'strength-medium';
+            strengthText.textContent = 'يجب أن تتكون كلمة المرور من 8 أحرف على الأقل';
+            strengthText.style.color = '#f4b400';
+            hasError = true;
+        } else {
+            // password is valid
+            passwordContainer.classList.remove('error', 'password-rule-error');
+        }
+
+        // validate confirm password
+        if (!confirmPassword.trim()) {
+            // confirm password is empty
+            confirmPasswordContainer.classList.add('error');
+            confirmPasswordContainer.querySelector('.error-text').textContent =
+                'فضلًا أدخل كلمة المرور للمتابعة.';
+            hasError = true;
+        } else if (password !== confirmPassword) {
+            // passwords do not match
+            confirmPasswordContainer.classList.add('error');
+            confirmPasswordContainer.querySelector('.error-text').textContent =
+                'كلمتا المرور غير متطابقتين';
+            hasError = true;
+        } else {
+            // confirm password is correct
+            confirmPasswordContainer.classList.remove('error');
+        }
+
+        // stop signup if any error exists
+        if (hasError) return;
+
+        // create simple user object
+        const user = {
+            name: name,
+            email: email
+        };
+
+        // save user data in localStorage
+        localStorage.setItem('currentUser', JSON.stringify(user));
+
+        // redirect user to home page after successful signup
+        window.location.href = 'home-page.html';
+    });
+
+
 </script>
 
 
