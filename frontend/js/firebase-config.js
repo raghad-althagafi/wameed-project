@@ -4,13 +4,14 @@ import { getAuth } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-aut
 
 // Firebase project settings
 const firebaseConfig = {
-  apiKey: "AIzaSyBmM7rZt-kv3C0CZxw7iWcLxOyJ4CJt1Gg",
-  authDomain: "wameed-project-227c2.firebaseapp.com",
-  projectId: "wameed-project-227c2",
-  storageBucket: "wameed-project-227c2.firebasestorage.app",
-  messagingSenderId: "251849817439",
-  appId: "1:251849817439:web:6cb6288d3fe46e501fcaea"
-};
+    apiKey: "AIzaSyCtNRyqhNCWxmVy83lAfUrcUw3a8rzbBx0",
+    authDomain: "wameed-4c9ef.firebaseapp.com",
+    projectId: "wameed-4c9ef",
+    storageBucket: "wameed-4c9ef.firebasestorage.app",
+    messagingSenderId: "614908637534",
+    appId: "1:614908637534:web:b876f54c5b0a3a79b7dfcf",
+    measurementId: "G-4V0Z2JDEV1"
+  };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig); 

@@ -42,7 +42,7 @@ class Navbar {
                 </a>
 
                 <!-- logout button -->
-                <button class="main-button btn-login" onclick="navbar.logout()">تسجيل الخروج</button>
+                <button class="main-button btn-login" id="logoutBtn">تسجيل الخروج</button>
             </div>
         ` : `
             <!-- when the user is not loged in -->
@@ -94,6 +94,12 @@ class Navbar {
         if (container) {
             container.innerHTML = this.getNavbarHTML();
             this.setActiveLink(); //highlight the active page links
+        }
+
+        // logout
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => this.logout());
         }
     }
 
