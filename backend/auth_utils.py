@@ -22,7 +22,7 @@ def verify_request_token():
 
     try:
         FirebaseConnection.get_db()  # ensures firebase app is initialized
-        decoded = auth.verify_id_token(token) # verify token using Firebase Admin
+        decoded = auth.verify_id_token(token, clock_skew_seconds=60) # verify token using Firebase Admin
         return decoded, None # return decoded token data
     except Exception as e:
         # return error if token is invalid

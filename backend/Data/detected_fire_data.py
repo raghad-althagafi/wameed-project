@@ -1,6 +1,7 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, g
 from datetime import datetime # import class datetime
 from Singleton.firebase_connection import FirebaseConnection  # import firebase connection class
+from auth_utils import login_required
 
 DETECTED_COLLECTION = "detected_fire" # name of collection
 
@@ -10,13 +11,26 @@ detections_bp = Blueprint("detections_bp", __name__, url_prefix="/api/detections
 # ---------- ROUTES ----------
 
 @detections_bp.route("", methods=["GET"]) # route for method GET
+@login_required
 def api_get_detections(): # the function will be excuted
 
-# F5OiRsaaIVCYhbzOyAt3 ONLY FOR TEST
-    user_id = request.args.get("user_id", "F5OiRsaaIVCYhbzOyAt3") # return User_Id from the URL
+
+    user_id = g.user_uid # return User_Id from Firebase token
     
     # call get_user_detections function to return user detections
-    return jsonify(get_user_detections(user_id))
+    detections = get_user_detections(user_id)
+
+    if not detections:
+        return jsonify({
+            "ok": True,
+            "message": "No detections found",
+            "data": []
+        }), 200
+
+    return jsonify({
+        "ok": True,
+        "data": detections
+    }), 200
 
 # ---------- DATA ----------
 

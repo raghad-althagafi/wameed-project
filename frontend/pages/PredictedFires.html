@@ -238,7 +238,10 @@
     </footer>
     
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script> <!-- import library for interactive maps -->
-    <script>
+    <script type="module">
+        import { getAuthToken } from "../js/auth.js";
+        import { auth } from "../js/firebase-config.js";
+        
         // initalize the map in varible map
         // L indicate leaflet library,and put the map in div that has the id=map
         // and the lan and lat is at riyadh, 5 indicate the zoom of the map
@@ -277,7 +280,6 @@
         
         // ----------- Load predictions for user from backend DB ----------------
         
-        const USER_ID = "F5OiRsaaIVCYhbzOyAt3"; // User ID
         const API_BASE = "http://127.0.0.1:5000"; // flask URL
         const currentDay = new Date().toISOString().split('T')[0]; // date for today in normal format
 
@@ -378,18 +380,30 @@
         // function that load predictions from Backend
         async function loadPredictionsFromBackend() {
             try {
-                //encodeURIComponent to ensure USER_ID appear correctly in URL
-                const url = `${API_BASE}/api/predictions?user_id=${encodeURIComponent(USER_ID)}`; // build the URL
-                const res = await fetch(url); // send request to server, and wait for response
-                
+                // get Firebase token for backend authorization
+                const token = await getAuthToken(true);
+
+                // if there is no logged-in user
+                if (!token) {
+                    throw new Error("User is not logged in");
+                }
+
+                // send request to backend with Firebase token
+                const res = await fetch(`${API_BASE}/api/predictions`, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`
+                    }
+                });
+
                 if (!res.ok) throw new Error(`HTTP ${res.status}`); // check if response was successful
                 // if not successful throw new error to catch
 
-                const rows = await res.json(); // convert response to JSON
-                const predictions = (rows || []).map(mapRowToPrediction); // check every row to ensure it appear proberly
-
+                const data = await res.json(); // convert response to JSON
+                const predictions = (data.data || []).map(mapRowToPrediction); // check every row to ensure it appear proberly
                 // display predictions in the page
                 renderLists(predictions);
+                
             } catch (err) {
                 const todayContainer = document.getElementById('todayPredictions');
                 const previousContainer = document.getElementById('previousPredictions');
@@ -399,8 +413,21 @@
             }
         }
 
-        // load predictions when page is loadeed
-        loadPredictionsFromBackend();
+        // load predictions when auth state is ready
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                loadPredictionsFromBackend();
+            } else {
+
+                // get containers
+                const todayContainer = document.getElementById('todayPredictions');
+                const previousContainer = document.getElementById('previousPredictions');
+
+                // show message when user is not logged in
+                todayContainer.innerHTML = `<div class="prediction-date">لا توجد تنبؤات لليوم</div>`;
+                previousContainer.innerHTML = `<div class="prediction-date">لا توجد تنبؤات سابقة</div>`;
+            }
+        });
 
         
         let popupMap; // represent the map inside popup window
@@ -492,19 +519,28 @@
             try {
 
                 const payload = {
-                    user_id: USER_ID,
-                    lat: selectedCoordinations.lat,
-                    lng: selectedCoordinations.lng,
-                    area_name: areaName
-                };
+                lat: selectedCoordinations.lat,
+                lng: selectedCoordinations.lng,
+                area_name: areaName
+            };
 
-                const res = await fetch(`${API_BASE}/api/predictions`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify(payload)
-                });
+            // get Firebase token for backend authorization
+            const token = await getAuthToken(true);
+
+            // if there is no logged-in user
+            if (!token) {
+                alert("الرجاء تسجيل الدخول أولاً");
+                return;
+            }
+
+            const res = await fetch(`${API_BASE}/api/predictions`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify(payload)
+            });
 
                 if (!res.ok) {
                     throw new Error(`HTTP ${res.status}`);
@@ -524,6 +560,11 @@
                 alert("حدث خطأ أثناء حفظ التنبؤ");
             }
     }
+        // make functions accessible from HTML onclick
+        window.openPopup = openPopup;
+        window.closePopup = closePopup;
+        window.closePopupOnOverlay = closePopupOnOverlay;
+        window.definePrediction = definePrediction;
     </script>
 </body>
 </html>

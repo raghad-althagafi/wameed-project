@@ -106,10 +106,10 @@ export async function signinWithEmail(email, password) {
 }
 
 // function to get current user token
-export async function getAuthToken() {
+export async function getAuthToken(forceRefresh = false) {
     const user = auth.currentUser; // get current logged-in user
     if (!user) return null; // if there is no logged-in user
-    return await user.getIdToken(); // return Firebase ID token
+    return await user.getIdToken(forceRefresh); // return Firebase ID token
 }
 
 // function to log out user
