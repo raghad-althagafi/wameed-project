@@ -1,5 +1,5 @@
-from flask import Blueprint, jsonify, g
-from datetime import datetime # import class datetime
+from flask import Blueprint, request, jsonify, g
+from datetime import datetime, timezone # import class datetime
 from Singleton.firebase_connection import FirebaseConnection  # import firebase connection class
 from auth_utils import login_required
 
@@ -8,12 +8,79 @@ DETECTED_COLLECTION = "detected_fire" # name of collection
 # Blue print for detections
 detections_bp = Blueprint("detections_bp", __name__, url_prefix="/api/detections")
 
+
+# ---------- HELPER FUNCTIONS ---------- 
+
+# convert input datetime to UTC datetime
+def _parse_datetime(value):
+    # if available, convert it
+    if value:
+        # Firestore Timestamp usually have to_datetime()
+        if hasattr(value, "to_datetime"):
+            dt = value.to_datetime()
+        # use it directly if it is python datetime object
+        elif isinstance(value, datetime):
+            dt = value
+        else:
+            # parse it
+            try:
+                dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            except ValueError:
+                # if fails use utc time as fallback
+                dt = datetime.now(timezone.utc)
+    else:
+        # use current utc time 
+        dt = datetime.now(timezone.utc)
+
+    # make sure it is in timezone and utc
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+
+    return dt
+
+# convert Firestore datetime objects to iso
+def _to_iso(value):
+    if value is None:
+        return None
+
+    # convert it to python datetime
+    if hasattr(value, "to_datetime"):
+        value = value.to_datetime()
+
+    # if the value is a datetime then normalize it to utc and convert it to iso
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc) # assume datetime is UTC
+        else:
+            value = value.astimezone(timezone.utc) # convert datetime to UTC
+        return value.isoformat() # convert datetime to iso
+
+    # if the value is not a datetime return its string
+    return str(value)
+
+# convert common formats to bool
+def _to_bool(value):
+    # if it is already bool return it
+    if isinstance(value, bool):
+        return value
+    # numeric values: 0 = False, else = True
+    if isinstance(value, (int, float)):
+        return value != 0
+    # convert common true-like strings into True
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "yes", "y"}
+    # anything else is False
+    return False
+
+
+
 # ---------- ROUTES ----------
 
 @detections_bp.route("", methods=["GET"]) # route for method GET
 @login_required
 def api_get_detections(): # the function will be excuted
-
 
     user_id = g.user_uid # return User_Id from Firebase token
     
@@ -31,6 +98,137 @@ def api_get_detections(): # the function will be excuted
         "ok": True,
         "data": detections
     }), 200
+
+
+# POST DETECTION
+
+# save a detection result into Firestore
+@detections_bp.route("", methods=["POST"])
+@login_required
+def api_create_detection():
+    # read json body safely
+    payload = request.get_json(silent=True) or {}
+
+    # user_id comes from Firebase token, not from frontend
+    user_id = g.user_uid
+
+    # required fields from the request body
+    lat = payload.get("lat")
+    lng = payload.get("lng")
+    is_detected = payload.get("is_detected")
+
+    # validate required fields
+    if lat is None or lng is None or is_detected is None:
+        return jsonify({
+            "ok": False,
+            "error": "Missing lat/lng/is_detected"
+        }), 400
+
+    # parse the detection time
+    detected_at_dt = _parse_datetime(payload.get("detected_at"))
+
+    # parse optional dataset timestamp if provided
+    dataset_time_dt = (
+        _parse_datetime(payload.get("dataset_time"))
+        if payload.get("dataset_time") else None
+    )
+
+    # choose the main event datetime
+    event_dt = detected_at_dt
+
+    # Optional fields
+    area_name = payload.get("area_name") or "User Selected Area"
+    base_detected = _to_bool(payload.get("base_detected"))
+    sensor_agreement_count = int(payload.get("sensor_agreement_count") or 0)
+    fused_confidence = payload.get("fused_confidence") or "None"
+    primary_source = payload.get("primary_source")
+    total_fire_pixels = int(payload.get("total_fire_pixels") or 0)
+    max_frp = float(payload.get("max_frp") or 0)
+    decision_reason = payload.get("decision_reason")
+    ndvi_mean = float(payload.get("ndvi_mean") or 0)
+    ndvi_rule = payload.get("ndvi_rule")
+    lulc_class = int(payload.get("lulc_class") or 0)
+    lulc_name = payload.get("lulc_name")
+    lulc_burnable = _to_bool(payload.get("lulc_burnable"))
+    previous_fire_observations = int(payload.get("previous_fire_observations") or 0)
+    persistence_confirmed = _to_bool(payload.get("persistence_confirmed"))
+    sources = payload.get("sources") or []
+
+    # weather-related values
+    temperature = float(payload.get("temperature") or 0)
+    humidity = float(payload.get("humidity") or 0)
+
+    # extra fire details
+    severity = payload.get("severity")
+    spread_direction = payload.get("spread_direction")
+    burned_area = payload.get("burned_area")
+
+    # get Firestore database instance
+    db = FirebaseConnection.get_db()
+
+    # create a new document reference
+    doc_ref = db.collection(DETECTED_COLLECTION).document()
+    fire_id = doc_ref.id
+
+    # main detection document data
+    doc = {
+        "Fire_ID": fire_id,
+        "User_ID": str(user_id),
+        "Area_name": str(area_name),
+
+        "Date": event_dt.date().isoformat(),
+        "Time": event_dt.strftime("%H:%M"),
+
+        "latitude": float(lat),
+        "longitude": float(lng),
+        "is_detected": _to_bool(is_detected),
+
+        "base_detected": base_detected,
+        "detected_at": detected_at_dt,
+        "dataset_time": dataset_time_dt,
+        "fire_datetime": event_dt,
+
+        "sensor_agreement_count": sensor_agreement_count,
+        "fused_confidence": str(fused_confidence),
+        "primary_source": primary_source,
+        "total_fire_pixels": total_fire_pixels,
+        "max_frp": max_frp,
+        "decision_reason": decision_reason,
+        "ndvi_mean": ndvi_mean,
+        "ndvi_rule": ndvi_rule,
+        "lulc_class": lulc_class,
+        "lulc_name": lulc_name,
+        "lulc_burnable": lulc_burnable,
+        "previous_fire_observations": previous_fire_observations,
+        "persistence_confirmed": persistence_confirmed,
+        "sources": sources
+    }
+
+    # save the main detection document into Firestore
+    doc_ref.set(doc)
+
+    # save detailed fire information if a fire was detected
+    if _to_bool(is_detected):
+        details_ref = doc_ref.collection("fire_details").document()
+        details_id = details_ref.id
+
+        details_ref.set({
+            "Details_ID": details_id,
+            "Fire_ID": fire_id,
+            "Temperature": temperature,
+            "Humidity": humidity,
+            "Severity": severity,
+            "Spread_Direction": spread_direction,
+            "Burned_Area": burned_area,
+            "fire_datetime": event_dt
+        })
+
+    # return success response
+    return jsonify({
+        "ok": True,
+        "id": fire_id,
+        "message": "Detection saved successfully"
+    }), 201
 
 # ---------- DATA ----------
 
@@ -53,12 +251,35 @@ def get_user_detections(user_id: str):
         data = d.to_dict() # convert document to dict
         data["id"] = d.id # adding id
 
-        det_at = data.get("detected_at") # return the value of detected_at
-        if hasattr(det_at, "to_datetime"): # if detected_at has method to_datetime
-            data["detected_at"] = det_at.to_datetime().isoformat() # then convert it to datetime then to ISO 
-        elif isinstance(det_at, datetime): # if detected_at does not have the method
-            data["detected_at"] = det_at.isoformat()
+        # convert datetime fields
+        data["detected_at"] = _to_iso(data.get("detected_at"))
+        data["dataset_time"] = _to_iso(data.get("dataset_time"))
+        data["fire_datetime"] = _to_iso(data.get("fire_datetime"))
+
+        # normalize bool values
+        data["is_detected"] = _to_bool(data.get("is_detected"))
+        data["base_detected"] = _to_bool(data.get("base_detected"))
+        data["lulc_burnable"] = _to_bool(data.get("lulc_burnable"))
+        data["persistence_confirmed"] = _to_bool(data.get("persistence_confirmed"))
+
+        # read all fire detail documents
+        details_docs = d.reference.collection("fire_details").stream()
+        details_list = []
+
+        # process each fire detail document
+        for fd in details_docs:
+            fd_data = fd.to_dict()
+            fd_data["id"] = fd.id
+            fd_data["fire_datetime"] = _to_iso(fd_data.get("fire_datetime"))
+            details_list.append(fd_data)
+
+        # attach fire details list to the main detection document
+        data["fire_details"] = details_list
+
 
         results.append(data) # append document to results array
+
+    # Sort newest first
+    results.sort(key=lambda item: item.get("detected_at") or "", reverse=True)
 
     return results # return results which is documents

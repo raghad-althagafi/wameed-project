@@ -45,6 +45,13 @@
             font-weight: bolder;
         }
 
+        .subtitle {
+            text-align: right;
+            color: #666;
+            font-size: 20px;
+            margin-bottom: 30px; /* space below the subtitle */
+            font-family: 'YearOfTheCamel', sans-serif;
+        }
 
         .map-button {
         width: 50%; /* the width is 50% of the container width */
@@ -137,23 +144,6 @@
             display: flex; /* the background appear when popup window opened */
         }
 
-        .popup-window {
-            background-color: white;
-            border-radius: 20px;
-            padding: 30px;
-            width: 450px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-        }
-
-        .popup-header {
-            text-align: center;
-            font-size: 22px;
-            font-weight: bold;
-            margin-bottom: 25px;
-            color: #333;
-            font-family: 'YearOfTheCamel', sans-serif;
-        }
-
         .popup-map {
             width: 100%;
             height: 350px;
@@ -167,14 +157,43 @@
             height: 100%;
         }
 
-        .popup-buttons {
-            display: flex; /* elements beside other */
-            gap: 15px;
-        }
-
         .popup-buttons button {
             flex: 1; /* buttons have same width */
         }
+
+        .popup-window {
+            width: 450px;
+            max-width: 90%;
+            background: white;
+            border-radius: 20px;
+            overflow: hidden; /* hide any content that goes outside the popup edges */
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            padding: 28px 24px 24px;
+        }
+
+        .popup-header {
+            text-align: center;
+            font-size: 22px;
+            font-weight: bold;
+            margin-bottom: 22px;
+            color: #333;
+            font-family: 'YearOfTheCamel', sans-serif;
+        }
+
+        .message-popup-body {
+            white-space: pre-line;
+            text-align: right;
+            font-size: 16px;
+            line-height: 1.9;
+            margin-bottom: 24px;
+        }
+
+        .popup-buttons {
+            display: flex; /* elements beside other */
+            justify-content: center;
+            margin-top: 8px;
+        }
+
     </style>
 </head>
 <body>
@@ -198,6 +217,7 @@
 
         <div class="right-section"> <!-- right section -->
             <h1>رصد الحرائق</h1> <!-- title -->
+            <p class="subtitle">الرصد يأخذ بضع ثواني</p> <!-- subTitle -->
 
             <!-- list for detections of today -->
             <div class="detections-header">رصد اليوم</div> <!-- title -->
@@ -223,6 +243,18 @@
             </div>
         </div>
     </div>
+
+    <!-- Popup window for alerts -->
+    <div class="popup-overlay" id="messagePopupOverlay" onclick="closeMessagePopupOnOverlay(event)">
+        <div class="popup-window" onclick="event.stopPropagation()">
+            <div class="popup-header" id="messagePopupTitle">تنبيه</div>
+            <div class="message-popup-body" id="messagePopupText"></div>
+            <div class="popup-buttons">
+                <button class="main-button" onclick="closeMessagePopup()">حسنًا</button>
+            </div>
+        </div>
+    </div>
+
 
     <!--Footer Section-->
     <footer class="footer">
@@ -492,20 +524,178 @@
             }
         }
 
+        // get the area name from latitude and longitude using reverse geocoding
+        async function reverseGeocode(lat, lng) {
+            let areaName = "منطقة من اختيار المستخدم"; // default area name if no better name is found
+
+            try {
+                // send request to convert coordinates into a readable area name
+                const geoRes = await fetch(
+                    `https://nominatim.openstreetmap.org/reverse?format=json&accept-language=ar&lat=${lat}&lon=${lng}`
+                );
+
+                // convert response to json
+                const geoData = await geoRes.json();
+
+                // if address information exists, choose the best available area name
+                if (geoData.address) {
+                    areaName =
+                        geoData.address.city || geoData.address.town ||
+                        geoData.address.village || geoData.address.county ||
+                        geoData.address.state || "منطقة من اختيار المستخدم";
+                }
+            } catch {
+                // if reverse geocoding fails, keep the default area name
+                console.log("Reverse geocoding failed");
+            }
+
+            return areaName;
+        }
+
         // function called when  user select 'تحديد' button
-        function definePrediction() {
-            if (selectedCoordinations) { // if selectedCoordinations has value so then the user has select the coordinations
-                alert(`تم تحديد الموقع: ${selectedCoordinations.lat.toFixed(1)}, ${selectedCoordinations.lng.toFixed(1)}`); // inform the user that it has been selected and show the coordinations, and show one number after the point
-                closePopup(); // then close the popup window
-            } else { // if the user has not select the coordinations yet
-                alert('الرجاء تحديد موقع على الخريطة');
+        async function definePrediction() {
+
+            if (!auth.currentUser) {
+                // stop if no user is logged in
+                openMessagePopup("تنبيه", "يرجى تسجيل الدخول أولًا.");
+                return;
+            }
+            if (!selectedCoordinations) { // if the user has not select the coordinations yet
+                openMessagePopup("تنبيه", "الرجاء تحديد موقع على الخريطة");
+                return;
+            }
+
+            // extract latitude and longitude from the selected point
+            const lat = selectedCoordinations.lat;
+            const lng = selectedCoordinations.lng;
+
+            closePopup(); // close the location selection popup
+
+            try {
+                // get Firebase token for protected backend routes
+                const token = await getAuthToken(true);
+
+                if (!token) {
+                    throw new Error("User is not logged in");
+                }   
+                // get readable area name from selected coordinates
+                const areaName = await reverseGeocode(lat, lng);
+
+                // send selected coordinates to backend
+                const detectionRes = await fetch(`${API_BASE}/fire-detection`, {
+                    method: "POST", headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}` },
+                    body: JSON.stringify({
+                        lat: lat, lon: lng })
+                });
+
+                // convert detection response to json
+                const detection = await detectionRes.json();
+
+                // if the detection request failed handle the error
+                if (!detectionRes.ok) {
+                    // if the location is outside Saudi Arabia
+                    if (detection.error === "outside_saudi") {
+                        openMessagePopup("تنبيه", "نعتذر، الخدمة متوفرة داخل حدود المملكة العربية السعودية فقط.");
+                        return;
+                    } else {
+                        // throw backend error message if available
+                        throw new Error(detection.message || detection.error || "فشل التحليل");
+                    }
+                }
+
+                // save the detection result in the detections collection
+                const saveRes = await fetch(`${API_BASE}/api/detections`, {
+                    method: "POST", headers: {
+                        "Content-Type": "application/json", 
+                        "Authorization": `Bearer ${token}` },
+                    body: JSON.stringify({
+                        lat: lat,
+                        lng: lng,
+                        area_name: areaName,
+                        is_detected: detection.is_detected,
+                        base_detected: detection.base_detected,
+                        detected_at: detection.detected_at,
+                        dataset_time: detection.dataset_time,
+                        fire_datetime: detection.fire_datetime,
+                        temperature: detection.temperature,
+                        humidity: detection.humidity,
+                        sensor_agreement_count: detection.sensor_agreement_count,
+                        fused_confidence: detection.fused_confidence,
+                        primary_source: detection.primary_source,
+                        total_fire_pixels: detection.total_fire_pixels,
+                        max_frp: detection.max_frp,
+                        decision_reason: detection.decision_reason,
+                        ndvi_mean: detection.ndvi_mean,
+                        ndvi_rule: detection.ndvi_rule,
+                        lulc_class: detection.lulc_class,
+                        lulc_name: detection.lulc_name,
+                        lulc_burnable: detection.lulc_burnable,
+                        previous_fire_observations: detection.previous_fire_observations,
+                        persistence_confirmed: detection.persistence_confirmed,
+                        sources: detection.sources
+                    })
+                });
+
+                // convert save response to json
+                const saveResult = await saveRes.json();
+
+                // show error if saving failed
+                if (!saveRes.ok) {
+                    throw new Error(saveResult.error || "Save failed");
+                }
+
+                // show success popup
+                if (detection.is_detected) { // when a fire detected
+                    openMessagePopup(
+                        "تم رصد حريق",
+                        `اسم المنطقة: ${areaName}\nالثقة: ${detection.fused_confidence}\nالمصدر الأساسي: ${detection.primary_source || "N/A"}\nالسبب: ${detection.decision_reason}`
+                    );
+                } else {
+                    openMessagePopup( // when no fire detected
+                        "لم يتم تأكيد حريق",
+                        `اسم المنطقة: ${areaName}\nالسبب: ${detection.decision_reason}`
+                    );
+                }
+
+                // reload detections list after saving the new result
+                await loadDetectionsFromBackend();
+
+
+            } catch (error) {
+                // handle any unexpected error
+                console.error(error);
+                openMessagePopup("خطأ", "حدث خطأ أثناء تحليل الحريق");
             }
         }
+
+        // open the message popup and fill it with title and message text
+        function openMessagePopup(title, message) {
+            document.getElementById('messagePopupTitle').textContent = title;
+            document.getElementById('messagePopupText').textContent = message;
+            document.getElementById('messagePopupOverlay').classList.add('active');
+        }
+
+        // close the message popup
+        function closeMessagePopup() {
+            document.getElementById('messagePopupOverlay').classList.remove('active');
+        }
+
+        // close the message popup only when clicking on the background
+        function closeMessagePopupOnOverlay(event) {
+            if (event.target.id === 'messagePopupOverlay') {
+                closeMessagePopup();
+            }
+        }
+
         // make functions accessible from HTML onclick
         window.openPopup = openPopup;
         window.closePopup = closePopup;
         window.closePopupOnOverlay = closePopupOnOverlay;
         window.definePrediction = definePrediction;
+        window.closeMessagePopup = closeMessagePopup;
+        window.closeMessagePopupOnOverlay = closeMessagePopupOnOverlay;
     </script>
 </body>
 </html>
