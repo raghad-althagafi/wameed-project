@@ -142,17 +142,17 @@
 
             <div class="info-group">
                 <label class="info-label">الاسم:</label>
-                <input type="text" id="display-name" class="info-input" value="سامية الحسني" readonly>
+                <input type="text" id="display-name" class="info-input" value="" readonly>
             </div>
 
             <div class="info-group">
                 <label class="info-label">البريد الإلكتروني:</label>
-                <input type="email" id="display-email" class="info-input" value="SamiaAlhassni@gmail.com" readonly>
+                <input type="email" id="display-email" class="info-input" value="" readonly dir="ltr">
             </div>
 
             <div class="info-group">
                 <label class="info-label">كلمة المرور:</label>
-                <input type="text" id="display-pass" class="info-input" value="SeniorYear@2026" readonly>
+                <input type="password" id="display-pass" class="info-input" value="********" readonly dir="ltr">
             </div>
 
             <div class="profile-buttons">
@@ -175,27 +175,79 @@
             </div>
     </footer>
 
-    <script>
-        // Function called on page load to retrieve saved data
-        window.onload = function() {
-            const savedName = localStorage.getItem('userName');
-            const savedEmail = localStorage.getItem('userEmail');
-            const savedPass = localStorage.getItem('userPass');
+    <script type="module">
+        // import Firebase auth instance
+        import { auth } from "../js/firebase-config.js";
 
-            // Update input fields if saved data exists
-            if (savedName) document.getElementById('display-name').value = savedName;
-            if (savedEmail) document.getElementById('display-email').value = savedEmail;
-            if (savedPass) document.getElementById('display-pass').value = savedPass;
+        // Import shared helper functions from auth.js
+        import { logoutUser, getAuthToken } from "../js/auth.js";
+
+        const API_BASE = "http://127.0.0.1:5000"; // backend base URL
+
+        // load current user profile data from backend
+        async function loadProfile() {
+            try {
+                // Get Firebase token for the current logged-in user
+                const token = await getAuthToken(true);
+
+                // Redirect to sign-in page if no user is authenticated
+                if (!token) {
+                    window.location.href = "sign-in.html";
+                    return;
+                }
+
+                // request current profile data from backend
+                const response = await fetch(`${API_BASE}/api/auth/me`, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`
+                    }
+                });
+
+                const data = await response.json(); // Convert backend response to JSON
+
+                // Stop if backend returns an error
+                if (!response.ok || !data.ok) {
+                    throw new Error(data.error || "Failed to load profile");
+                }
+
+                // fill name field with the value from backend
+                document.getElementById("display-name").value = data.user.User_name || "";
+                
+                // fill email field with the value from backend
+                document.getElementById("display-email").value = data.user.User_email || "";
+
+            } catch (error) {
+                console.error("Error loading profile:", error);
+                alert("تعذر تحميل بيانات الملف الشخصي");
+            }
         }
 
-        // Logout Function
-        function logoutUser() {
-            // Display a success message
-            alert("تم تسجيل الخروج بنجاح");
+        // logout the current user
+        window.logoutUser = async function () {
+            try {
+                // sign out from Firebase and clear saved user data
+                await logoutUser();
 
-            // Redirect user to the Home Page
-            window.location.href = "home-page.html";
-        }
+                // go back to home page after logout
+                window.location.href = "home-page.html";
+            } catch (error) {
+                console.error("Logout error:", error);
+                alert("حدث خطأ أثناء تسجيل الخروج");
+            }
+        };
+
+        // wait until Firebase finishes checking the auth state
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                // if the user is authenticated, load profile data
+                loadProfile();
+            } else {
+                // if there is no authenticated user, go to sign-in page
+                window.location.href = "sign-in.html";
+            }
+        });
+
     </script>
 
 </body>

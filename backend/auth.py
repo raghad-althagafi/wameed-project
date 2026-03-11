@@ -56,7 +56,6 @@ def me_options():
         return jsonify({"ok": True}), 200
     return get_me()
 
-
 @login_required
 def get_me():
     db = FirebaseConnection.get_db()
@@ -73,4 +72,52 @@ def get_me():
     return jsonify({
         "ok": True,
         "user": doc_ref.to_dict()
+    }), 200
+
+# route for updating user profile
+@auth_bp.route("/profile", methods=["PUT", "OPTIONS"])
+def update_profile_options():
+    # handle browser preflight request
+    if request.method == "OPTIONS":
+        return jsonify({"ok": True}), 200
+    return update_profile()
+
+# require logged-in user
+@login_required
+def update_profile():
+    # get JSON data from request
+    payload = request.get_json(silent=True) or {}
+
+    # get updated values from frontend
+    name = (payload.get("name") or "").strip()
+    email = (payload.get("email") or "").strip()
+
+    # validate name
+    if not name:
+        return jsonify({"ok": False, "error": "Name is required"}), 400
+
+    # validate email
+    if not email:
+        return jsonify({"ok": False, "error": "Email is required"}), 400
+
+    db = FirebaseConnection.get_db()
+
+    # get current logged-in user id from verified token
+    uid = g.user_uid
+
+    # update Firestore profile document
+    db.collection(USER_COLLECTION).document(uid).set({
+        "User_ID": uid,
+        "User_name": name,
+        "User_email": email
+    }, merge=True)
+
+    # get the updated document
+    updated_doc = db.collection(USER_COLLECTION).document(uid).get()
+
+    # return updated user data
+    return jsonify({
+        "ok": True,
+        "message": "User profile updated successfully",
+        "user": updated_doc.to_dict()
     }), 200

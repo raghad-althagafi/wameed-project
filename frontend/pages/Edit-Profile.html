@@ -122,7 +122,64 @@
             transform: translateY(-2px);
             opacity: 0.9;
         }
+
+        /* custom popup overlay */
+        .custom-popup-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            padding: 20px;
+        }
+
+        /* show popup */
+        .custom-popup-overlay.show {
+            display: flex;
+        }
+
+        /* popup box */
+        .custom-popup-box {
+            width: 100%;
+            max-width: 460px;
+            background: #fff;
+            border-radius: 22px;
+            padding: 30px 26px 24px;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
+            text-align: center;
+        }
+
+        /* popup title */
+        .custom-popup-title {
+            font-size: 28px;
+            color: var(--primary-color);
+            margin-bottom: 14px;
+            font-weight: 600;
+        }
+
+        /* popup message */
+        .custom-popup-message {
+            font-size: 19px;
+            line-height: 1.8;
+            color: #333;
+            margin-bottom: 24px;
+        }
+
+        /* popup button */
+        .custom-popup-button {
+            min-width: 120px;
+            padding: 12px 22px;
+            background: var(--primary-color);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            cursor: pointer;
+        }
     </style>
+
 </head>
 <body>
     <!-- Header Section -->
@@ -155,19 +212,37 @@
                 </div>
 
                 <div class="info-group">
-                    <label class="info-label">كلمة المرور:</label>
-                    <input type="text" id="passInput" class="info-input" value="" dir="ltr">
+                    <label class="info-label">كلمة المرور الحالية:</label>
+                    <input type="password" id="currentPasswordInput" class="info-input" placeholder="كلمة المرور الحالية" value="" dir="ltr">
+                </div>
+
+                <div class="info-group">
+                    <label class="info-label">كلمة المرور الجديدة:</label>
+                    <input type="password" id="newPasswordInput" class="info-input" placeholder="كلمة المرور الجديدة" value="" dir="ltr">
+                </div>
+
+                <div class="info-group">
+                    <label class="info-label">تأكيد كلمة المرور:</label>
+                    <input type="password" id="confirmPasswordInput" class="info-input" placeholder="تأكيد كلمة المرور" value="" dir="ltr">
                 </div>
 
                 <div class="profile-buttons">
-                    <button type="button" class="btn-save" onclick="saveData()">
-                        <span>💾</span> حفظ
+                    <button type="submit" class="btn-save">
+                        <span></span> حفظ
                     </button>
                     <button type="button" class="btn-cancel" onclick="goBack()">إلغاء</button>
                 </div>
             </form>
         </div>
     </main>
+
+    <div id="customPopup" class="custom-popup-overlay">
+        <div class="custom-popup-box">
+            <h3 id="customPopupTitle" class="custom-popup-title">تنبيه</h3>
+            <p id="customPopupMessage" class="custom-popup-message"></p>
+            <button id="customPopupBtn" class="custom-popup-button">حسنًا</button>
+        </div>
+    </div>
 
     <!-- Footer -->
     <footer class="footer">
@@ -181,39 +256,266 @@
             </div>
     </footer>
 
-    <script>
-        // 1. On Load: Get existing data to pre-fill the form
-        window.onload = function() {
-            // Default data if nothing is saved
-            const defaultName = "سامية الحسني";
-            const defaultEmail = "SamiaAlhassni@gmail.com";
-            const defaultPass = "SeniorYear@2026";
+    <script type="module">
+        // import Firebase auth instance
+        import { auth } from "../js/firebase-config.js";
 
-            // Get from storage or use default
-            document.getElementById('nameInput').value = localStorage.getItem('userName') || defaultName;
-            document.getElementById('emailInput').value = localStorage.getItem('userEmail') || defaultEmail;
-            document.getElementById('passInput').value = localStorage.getItem('userPass') || defaultPass;
-        };
+        // import shared helper functions from auth.js
+        import { getAuthToken, logoutUser } from "../js/auth.js";
 
-        // 2. Save Data Function
-        function saveData() {
-            const name = document.getElementById('nameInput').value;
-            const email = document.getElementById('emailInput').value;
-            const pass = document.getElementById('passInput').value;
+        // import Firebase functions for sensitive account updates
+        import {
+            EmailAuthProvider,
+            reauthenticateWithCredential,
+            verifyBeforeUpdateEmail,
+            updatePassword
+        } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 
-            // Save to browser storage
-            localStorage.setItem('userName', name);
-            localStorage.setItem('userEmail', email);
-            localStorage.setItem('userPass', pass);
+        const API_BASE = "http://127.0.0.1:5000"; // backend base URL
 
-            alert('تم حفظ التعديلات بنجاح!');
-            window.location.href = 'Profile.html'; // Go back to profile
+        // popup elements
+        const customPopup = document.getElementById("customPopup");
+        const customPopupTitle = document.getElementById("customPopupTitle");
+        const customPopupMessage = document.getElementById("customPopupMessage");
+        const customPopupBtn = document.getElementById("customPopupBtn");
+
+        // show popup with title, message, and optional action after closing
+        function showPopup(title, message, onClose = null) {
+            customPopupTitle.textContent = title;
+            customPopupMessage.textContent = message;
+            customPopup.classList.add("show");
+
+            const closeHandler = () => {
+                customPopup.classList.remove("show");
+                customPopupBtn.removeEventListener("click", closeHandler);
+                if (onClose) onClose();
+            };
+            customPopupBtn.addEventListener("click", closeHandler);
         }
 
-        // 3. Cancel Function
-        function goBack() {
-            window.location.href = 'Profile.html';
+        // load current user data from backend
+        async function loadCurrentProfile() {
+            try {
+                const user = auth.currentUser;
+
+                // if no user is logged in, redirect to sign in
+                if (!user) {
+                    window.location.href = "sign-in.html";
+                    return;
+                }
+
+                // Get Firebase token for the current logged-in user
+                const token = await getAuthToken(true);
+
+                // Redirect if token is missing
+                if (!token) {
+                    window.location.href = "sign-in.html";
+                    return;
+                }
+
+                // request current profile from backend
+                const response = await fetch(`${API_BASE}/api/auth/me`, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`
+                    }
+                });
+
+                const data = await response.json(); // Convert backend response to JSON
+
+                // stop if backend returns an error
+                if (!response.ok || !data.ok) {
+                    showPopup("خطأ", data.error || "تعذر تحميل بيانات المستخدم");
+                    return;
+                }
+
+                // fill form fields with current data
+                document.getElementById("nameInput").value = data.user.User_name || "";
+                document.getElementById("emailInput").value = data.user.User_email || "";
+                
+            } catch (error) {
+                console.error("Load edit profile error:", error);
+                showPopup("خطأ", "حدث خطأ أثناء تحميل البيانات");
+            }
         }
+
+        // Re-authenticate user before changing email or password
+        async function reauthenticateUser(currentPassword) {
+            const user = auth.currentUser;
+
+            // Create credential using current email and current password
+            const credential = EmailAuthProvider.credential(
+                user.email,
+                currentPassword
+            );
+            // Re-authenticate the current user
+            await reauthenticateWithCredential(user, credential);
+        }
+
+        // update Firestore profile through backend
+        async function updateBackendProfile(name, email) {
+            const token = await getAuthToken(true);
+
+            if (!token) {
+                throw new Error("Authentication token not found");
+            }
+            // Send updated name and email to backend
+            const response = await fetch(`${API_BASE}/api/auth/profile`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({ name, email })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok || !data.ok) {
+                throw new Error(data.error || "تعذر تحديث الملف الشخصي");
+            }
+
+            // Update the saved user name in localStorage for navbar display
+            const currentUser = JSON.parse(localStorage.getItem("currentUser") || "{}");
+            localStorage.setItem("currentUser", JSON.stringify({
+                ...currentUser,
+                name
+           }));
+        }
+
+        // save edited profile data
+        async function saveData(event) {
+            event.preventDefault();
+
+            const user = auth.currentUser;
+            // Redirect if user is not logged in
+            if (!user) {
+                window.location.href = "sign-in.html";
+                return;
+            }
+
+            // Get form values
+            const name = document.getElementById("nameInput").value.trim();
+            const email = document.getElementById("emailInput").value.trim();
+            const currentPassword = document.getElementById("currentPasswordInput").value;
+            const newPassword = document.getElementById("newPasswordInput").value;
+            const confirmPassword = document.getElementById("confirmPasswordInput").value;
+
+            if (!name) {
+                showPopup("خطأ", "الاسم مطلوب.");
+                return;
+            }
+            if (!email) {
+                showPopup("خطأ", "البريد الإلكتروني مطلوب.");
+                return;
+            }
+
+            // Check whether email or password was changed
+            const emailChanged = email !== (user.email || "");
+            const passwordChanged = newPassword.trim() !== "" || confirmPassword.trim() !== "";
+
+            // Prevent password update if the two new password fields do not match
+            if (passwordChanged && newPassword.trim() !== confirmPassword.trim()) {
+                showPopup("خطأ", "كلمتا المرور الجديدتان غير متطابقتين.");
+                return;
+            }
+            // Prevent using the same current password as the new password
+            if (passwordChanged && currentPassword === newPassword) {
+                showPopup("خطأ", "كلمة المرور الجديدة يجب أن تكون مختلفة عن كلمة المرور الحالية.");
+                return;
+            }
+            // Require current password for sensitive changes
+            if ((emailChanged || passwordChanged) && !currentPassword) {
+                showPopup("خطأ", "أدخلي كلمة المرور الحالية لتعديل البريد الإلكتروني أو كلمة المرور.");
+                return;
+            }
+            // If current password is entered without changing email or password, show warning
+            if (currentPassword && !emailChanged && !passwordChanged) {
+                showPopup("تنبيه", "كلمة المرور الحالية تُستخدم فقط عند تعديل البريد الإلكتروني أو كلمة المرور.");
+                return;
+            }
+            // Track whether Firebase was updated before backend update
+            let firebaseUpdated = false;
+
+            try {
+                // re-authenticate before sensitive updates
+                if (emailChanged || passwordChanged) {
+                    await reauthenticateUser(currentPassword);
+                }
+
+                // if email is changed, Firebase requires verification first
+                if (emailChanged) {
+                    await verifyBeforeUpdateEmail(user, email);
+
+                    // update only the name now if needed, but do not save the new email yet
+                    await updateBackendProfile(name, user.email || "");
+                    showPopup(
+                        "تنبيه",
+                        "تم إرسال رابط تحقق إلى البريد الإلكتروني الجديد. يرجى فتح الرابط من بريدك الإلكتروني، ثم تسجيل الدخول مرة أخرى بالبريد الجديد لإكمال التحديث.",
+                        async () => {
+                            await logoutUser(); // Log out after sending verification email
+                            window.location.href = "sign-in.html";
+                        }
+                    );
+                    return;
+                }
+
+                // update password in Firebase Auth
+                if (passwordChanged) {
+                    await updatePassword(user, newPassword);
+                    firebaseUpdated = true;
+                }
+                // update Firestore profile
+                await updateBackendProfile(name, user.email || email);
+
+                showPopup("تم بنجاح", "تم حفظ التعديلات بنجاح.", () => {
+                    window.location.href = "Profile.html";
+                });
+
+            } catch (error) {
+                console.error("Save profile error:", error);
+
+                const code = error.code || "";
+                const msg = error.message || "";
+
+                if (code === "auth/invalid-credential") {
+                    showPopup("خطأ", "كلمة المرور الحالية غير صحيحة.");
+                } else if (code === "auth/email-already-in-use") {
+                    showPopup("خطأ", "هذا البريد الإلكتروني مستخدم مسبقًا.");
+                } else if (code === "auth/invalid-email") {
+                    showPopup("خطأ", "البريد الإلكتروني الجديد غير صالح.");
+                } else if (code === "auth/weak-password") {
+                    showPopup("خطأ", "كلمة المرور الجديدة ضعيفة.");
+                } else if (code === "auth/requires-recent-login") {
+                    showPopup("خطأ", "انتهت الجلسة الحساسة. سجلي الدخول مرة أخرى ثم حاولي.");
+                } else if (firebaseUpdated) {
+                    showPopup(
+                        "تنبيه",
+                        "تم تحديث بعض البيانات في Firebase، لكن حدثت مشكلة أثناء مزامنة الملف الشخصي مع قاعدة البيانات."
+                    );
+                } else {
+                    showPopup("خطأ", msg || "حدث خطأ أثناء حفظ التعديلات.");
+                }
+            }
+        }
+            // cancel button action
+            window.goBack = function () {
+                window.location.href = "Profile.html";
+            };
+
+            // attach submit event to form
+            document.getElementById("editForm").addEventListener("submit", saveData);
+
+            // wait for Firebase auth state before loading data
+            auth.onAuthStateChanged((user) => {
+                if (user) {
+                    loadCurrentProfile();
+                } else {
+                    window.location.href = "sign-in.html";
+                }
+            });
+
     </script>
+
 </body>
 </html>

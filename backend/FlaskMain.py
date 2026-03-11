@@ -15,7 +15,6 @@ from FireThreatEstimator import fire_threat_bp
 from FireDetection import fire_detection_bp
 from auth import auth_bp
 
-
 GEEConnection.get_instance() # initalize google earth engine connection once turning on the server, so whenever connection needed after that it will be returned
 
 # ----------------- PAGES ROUTES ------------------
@@ -24,9 +23,7 @@ GEEConnection.get_instance() # initalize google earth engine connection once tur
 # PAGES_DIR = os.path.join(FRONTEND_DIR, "pages")
 # ----------------- PAGES ROUTES ------------------
 
-
 app = Flask(__name__) # create the server
-
 
 # enable CORS for API routes
 CORS(
@@ -37,7 +34,7 @@ CORS(
     app,
     resources={r"/*": {"origins": ["http://127.0.0.1:5500", "http://localhost:5500"]}},
     allow_headers=["Content-Type", "Authorization"],
-    methods=["GET", "POST", "OPTIONS"],
+    methods=["GET", "POST", "PUT", "OPTIONS"],
     supports_credentials=True
 )
 
@@ -53,7 +50,6 @@ app.register_blueprint(detections_bp)
 app.register_blueprint(fire_detection_bp)
 
 app.register_blueprint(auth_bp)
-
 
 if __name__ == "__main__":
     app.run(debug=True)

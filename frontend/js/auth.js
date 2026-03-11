@@ -110,6 +110,27 @@ export async function signinWithEmail(email, password) {
         throw new Error(data.error || "Failed to load user profile");
     }
 
+    // sync backend email with Firebase email if they are different
+    if (user.email && data.user.User_email !== user.email) {
+        const syncRes = await fetch(`${API_BASE}/api/auth/profile`, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${idToken}`
+            },
+            body: JSON.stringify({
+                name: data.user.User_name || "مستخدم",
+                email: user.email
+            })
+        });
+        const syncData = await syncRes.json();
+        
+        // Replace local backend data with the updated data if sync succeeds
+        if (syncRes.ok && syncData.ok) {
+            data.user = syncData.user;
+        }
+    }
+    // Save current user data locally after successful sign-in
     saveCurrentUser(user, data.user, "مستخدم");
 
     // return user data
