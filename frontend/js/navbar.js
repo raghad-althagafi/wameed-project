@@ -1,4 +1,4 @@
-import { logoutUser } from "./auth.js";
+import { logoutUser, getStoredCurrentUser } from "./auth.js";
 
 //class for handles rendering and updating the navigation bar
 class Navbar {
@@ -12,8 +12,7 @@ class Navbar {
 
     //retrieve user data from localStorage
     getUser() {
-        const userJson = localStorage.getItem('currentUser');
-        return userJson ? JSON.parse(userJson) : null; //if the user exists conver JSON to object, otherwise return null
+        return getStoredCurrentUser();
     }
 
     // logout the user
@@ -24,7 +23,6 @@ class Navbar {
             console.error(error);
         }
 
-        localStorage.removeItem('currentUser'); //remove the user data from the localStorage
         window.location.href = '../pages/home-page.html'; //redirect to homepage after logout
     }
 

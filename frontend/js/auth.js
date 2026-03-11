@@ -9,6 +9,27 @@ import {
 
 const API_BASE = "http://127.0.0.1:5000"; // backend base URL
 
+// save current user in localStorage
+function saveCurrentUser(firebaseUser, backendUser = null, fallbackName = "مستخدم") {
+    localStorage.setItem("currentUser", JSON.stringify({
+        uid: firebaseUser.uid, name: backendUser?.User_name || fallbackName }));
+}
+
+// remove the currently stored user from localStorage
+function clearCurrentUser() {
+    localStorage.removeItem("currentUser");
+}
+
+// retrieve the current user from localStorage
+export function getStoredCurrentUser() {
+    try {
+        const raw = localStorage.getItem("currentUser");
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+}
+
 // function to create a new account
 export async function signupWithEmail(name, email, password) {
     // create user in Firebase Authentication
@@ -33,7 +54,7 @@ export async function signupWithEmail(name, email, password) {
     }
 
     // get Firebase ID token for backend authorization
-    const idToken = await user.getIdToken();
+    const idToken = await user.getIdToken(true);
 
     // send user name to backend to complete registration
     const res = await fetch(`${API_BASE}/api/auth/register`, {
@@ -53,12 +74,7 @@ export async function signupWithEmail(name, email, password) {
         throw new Error(data.error || "Failed to register user in backend");
     }
 
-    // save current user data in local storage
-    localStorage.setItem("currentUser", JSON.stringify({
-        uid: user.uid,
-        name: data.user?.User_name || name,
-        email: user.email
-    }));
+    saveCurrentUser(user, data.user, name);
 
     // return registration result
     return {
@@ -76,7 +92,7 @@ export async function signinWithEmail(email, password) {
     const user = userCredential.user;
 
     // get Firebase ID token
-    const idToken = await user.getIdToken();
+    const idToken = await user.getIdToken(true);
 
     // send user data to backend
     const res = await fetch(`${API_BASE}/api/auth/me`, {
@@ -94,12 +110,7 @@ export async function signinWithEmail(email, password) {
         throw new Error(data.error || "Failed to load user profile");
     }
 
-    // save signed-in user data in local storage
-    localStorage.setItem("currentUser", JSON.stringify({
-        uid: user.uid,
-        name: data.user?.User_name || "مستخدم",
-        email: user.email
-    }));
+    saveCurrentUser(user, data.user, "مستخدم");
 
     // return user data
     return data;
@@ -115,7 +126,8 @@ export async function getAuthToken(forceRefresh = false) {
 // function to log out user
 export async function logoutUser() {
     await signOut(auth); // sign out from Firebase
-    localStorage.removeItem("currentUser"); // remove saved user data from local storage
+    clearCurrentUser();
+    // localStorage.removeItem("currentUser"); // remove saved user data from local storage
 }
 
 // function to send reset password email
