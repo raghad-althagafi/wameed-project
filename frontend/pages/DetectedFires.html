@@ -334,8 +334,16 @@
                 time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
                 };
             }
+
+            // clean possible milliseconds
             const cleaned = String(iso).replace(/\.\d+/, "");
             const d = new Date(cleaned);
+
+            // if date parsing fails return placeholders
+            if (isNaN(d)) {
+                console.warn("Invalid detected date:", iso);
+                return { date: "-", time: "-" };
+            }
 
             const yyyy = d.getFullYear(); //get year
             const mm = String(d.getMonth() + 1).padStart(2, "0"); //get month, add 1 cause months from 0-11
@@ -345,23 +353,27 @@
 
             // return date and time object in correct format
             return { date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${mi}` };
-            }
+        }
 
             // unifie data from backend
             function mapRowToDetection(row) {
-            const iso = row.detected_at || null; // detected_at which is date, time in ISO format
-            const parts = toDateParts(iso); // convert ISO into normal format
 
-            // return detection data
-            return {
-                id: row.id,
-                name: row.Area_name,
-                lat: row.latitude,
-                lng: row.longitude,
-                fire: !!row.is_detected,
-                date: parts.date,
-                time: parts.time
-            };
+                // detected_at which is date, time in ISO format
+                // support both detected_at and detected_At from database
+                const iso = row.detected_at || row.detected_At || null;
+
+                const parts = toDateParts(iso); // convert ISO into normal format
+
+                // return detection data
+                return {
+                    id: row.id || null, // document id from backend
+                    name: row.Area_name || row.area_name || "منطقة غير معروفة", // support both field names
+                    lat: row.latitude ?? row.lat, // support latitude or lat
+                    lng: row.longitude ?? row.Longitude ?? row.lng, // support longitude variations
+                    fire: !!row.is_detected,
+                    date: parts.date,
+                    time: parts.time
+                };
             }
 
         // claar today makeres from map
@@ -370,11 +382,23 @@
             todayMarkers.forEach(m => map.removeLayer(m)); // remover today markeres from array
             todayMarkers.length = 0;
         }
-         // function to add today markers on map
+        // function to add today markers on map
         function addTodayMarkers(todayDetections) {
             clearTodayMarkers();
 
             todayDetections.forEach(dect => {
+
+                // check if coordinates are valid before creating marker
+                if (
+                    dect.lat == null ||
+                    dect.lng == null ||
+                    isNaN(Number(dect.lat)) ||
+                    isNaN(Number(dect.lng))
+                ) {
+                    console.warn("Invalid detection coordinates:", dect);
+                    return;
+                }
+
                 const icon = L.divIcon({
                     className: 'custom-marker',
                     // if dect.fire == true marker would be red, if its false marker would be green
@@ -382,7 +406,7 @@
                     iconSize: [20, 20]
                 }); // create icon
 
-                const marker = L.marker([dect.lat, dect.lng], { icon }).addTo(map); // add marker to map
+                const marker = L.marker([Number(dect.lat), Number(dect.lng)], { icon }).addTo(map); // add marker to map
                 todayMarkers.push(marker); // push marker for today markers array
             });
         }
@@ -439,7 +463,13 @@
                 // if not successful throw new error to catch
 
                 const data = await res.json(); // convert response to JSON
-                const detections = (data.data || []).map(mapRowToDetection); // check every row to ensure it appear proberly
+
+                console.log("detections response:", data);
+
+                const detections = (data.data || []).map(row => {
+                    console.log("row from backend:", row);
+                    return mapRowToDetection(row);
+                }); // check every row to ensure it appear proberly
 
                 // display detections in the page
                 renderLists(detections);

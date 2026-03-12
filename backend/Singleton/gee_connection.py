@@ -19,9 +19,9 @@ class GEEConnection:
 
     def _initialize(self):
         
-        print("✅ Initializing GEE (should happen once)")
+        print(" Initializing GEE (should happen once)")
         ee.Initialize(project=PROJECT_ID)
-        print(f"✅ GEE initialized with project: {PROJECT_ID}")
+        print(f" GEE initialized with project: {PROJECT_ID}")
 
     def get_ee(self):
         return ee
