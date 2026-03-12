@@ -564,13 +564,13 @@
         }
 
 
-        // ------------ Spread Direction --------------------
+        
 
         // ------ temporary values for testing --------------
-        const tempLat = 18.3;
-        const tempLng = 42.7;
-        const tempDate = "2023-08-10";
-        const tempTime = "14:00";
+        const tempLat = 39.8139;
+        const tempLng = -121.4340;
+        const tempDate = "2018-11-08";
+        const tempTime = "06:33";
 
         // convert date time into ISO 
         const whenIso = `${tempDate}T${tempTime}:00Z`;
@@ -669,6 +669,7 @@
         exposureSlider.oninput = updateValues;
 
         updateValues();
+        // ------------ Spread Direction --------------------
 
         // ----------- function for calling backend to calculate spread direction ------------
         async function loadSpreadDirection() {
