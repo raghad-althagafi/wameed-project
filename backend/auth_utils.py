@@ -32,6 +32,8 @@ def verify_request_token():
 def login_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
+        if request.method == "OPTIONS":
+            return "", 200
         # verify token from request
         decoded, error = verify_request_token()
         if error:

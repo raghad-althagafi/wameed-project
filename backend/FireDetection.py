@@ -9,6 +9,7 @@ fire_detection_bp = Blueprint("fire_detection", __name__) # blueprint for the fi
 class OutsideSaudiError(Exception):
     pass
 
+
 # -----------------------------
 # CONFIGURATION
 # -----------------------------
@@ -54,7 +55,6 @@ PRODUCTS = [
     }
 ]
 
-
 # names for MCD12Q1 LC_Type1 classes
 LULC_NAMES = {
     1: "Evergreen Needleleaf Forest",
@@ -79,24 +79,23 @@ LULC_NAMES = {
 # -----------------------------
 # HELPER FUNCTIONS
 # -----------------------------
-
 def _get_saudi_geometry():
     # get Saudi Arabia boundary from Google Earth Engine
     countries = ee.FeatureCollection("USDOS/LSIB_SIMPLE/2017")
     saudi_feature = countries.filter(ee.Filter.eq("country_na", "Saudi Arabia")).first()
 
-    # if the feature is missing, this is an internal server issue
+# if the feature is missing, this is an internal server issue
     if saudi_feature is None:
         raise RuntimeError("Saudi Arabia boundary was not found in GEE dataset.")
 
     return saudi_feature.geometry()
-# -----------------------------------------------------------------------------------------------------    
+
 
 def _ensure_inside_saudi(lat: float, lon: float):
     # check if the selected point is inside Saudi Arabia
     saudi_geom = _get_saudi_geometry()
 
-    # build the selected point
+    # build the selected poin
     pt = ee.Geometry.Point([lon, lat])
 
     # check whether the point is inside the Saudi polygon
@@ -104,7 +103,7 @@ def _ensure_inside_saudi(lat: float, lon: float):
 
     if not bool(inside):
         raise OutsideSaudiError("Selected location is outside Saudi Arabia")
-# -----------------------------------------------------------------------------------------------------    
+
 
 def _coerce_utc_datetime(value):
     # if there is a valid value then convert it to UTC datetime
@@ -116,19 +115,18 @@ def _coerce_utc_datetime(value):
     else:
         dt = datetime.now(timezone.utc) # take the currrect time if there is no value
 
-    # check if the datetime has timezone information
+    # check if the datetime has timezone informatio
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc) # if there is no timezone info, assume it is UTC
     else:
         dt = dt.astimezone(timezone.utc) # convert from the current timezone to the current UTC
 
     return dt
-# -----------------------------------------------------------------------------------------------------    
+
 
 def _safe_number(value, default=0):
     # return a safe value
     return ee.Number(ee.Algorithms.If(value, value, default))
-# -----------------------------------------------------------------------------------------------------    
 
 # convert the value to float
 def _safe_float(value, default=0.0):
@@ -138,64 +136,78 @@ def _safe_float(value, default=0.0):
         return float(value)
     except Exception:
         return float(default)
-# -----------------------------------------------------------------------------------------------------    
 
 def _get_gfs_weather(aoi, when_iso):
-    
-    when_dt = _coerce_utc_datetime(when_iso) # convert the time to a UTC
+    when_dt = _coerce_utc_datetime(when_iso)
+    when = ee.Date(when_dt.isoformat())
 
-    # convert it to ee date
-    t0 = ee.Date(when_dt.isoformat())
-    # from 6 hours before the target time to 1 hour after it
-    t1 = t0.advance(1, "hour")
-    t_prev = t0.advance(-6, "hour")
-
-    # load the NOAA GFS weather forecast image collection
-    gfs = ee.ImageCollection("NOAA/GFS0P25")
-
-    # filter images inside the time window
-    filtered = (
-        gfs.filter(ee.Filter.gte("forecast_time", t_prev.millis()))
-           .filter(ee.Filter.lte("forecast_time", t1.millis()))
-           .sort("forecast_time", False) # sort from newest to oldest
+    era = (
+        ee.ImageCollection("ECMWF/ERA5_LAND/HOURLY")
+        .filterDate(when.advance(-2, "hour"), when.advance(2, "hour"))
+        .filterBounds(aoi)
     )
 
-    # create a fallback image in case no GFS image is found
-    fallback = ee.Image.constant([0, 0]).rename([
-        "temperature_2m_above_ground", # to be 0
-        "relative_humidity_2m_above_ground" # to be 0
+    fallback = ee.Image.constant([273.15, 0]).rename([
+        "temperature_2m",
+        "relative_humidity"
     ])
 
-    # use the first filtered image if available otherwise use fallback
-    gfs_img = ee.Image(
+    def add_time_diff(img):
+        diff = ee.Number(img.get("system:time_start")).subtract(when.millis()).abs()
+        return img.set("time_diff", diff)
+
+    img = ee.Image(
         ee.Algorithms.If(
-            filtered.size().gt(0),
-            filtered.first(),
+            era.size().gt(0),
+            era.map(add_time_diff).sort("time_diff").first(),
             fallback
         )
     )
 
-    vals = gfs_img.reduceRegion(
-        reducer=ee.Reducer.mean(), # compute te mean
+    # temperature from Kelvin to Celsius
+    temp_k = _safe_float(
+        img.reduceRegion(
+            reducer=ee.Reducer.mean(),
+            geometry=aoi,
+            scale=10000,
+            bestEffort=True,
+            maxPixels=1e9
+        ).get("temperature_2m").getInfo(),
+        273.15
+    )
+
+    # compute RH from dewpoint if direct RH band is unavailable
+    vals = img.reduceRegion(
+        reducer=ee.Reducer.mean(),
         geometry=aoi,
-        scale=30000, # 30km
-        bestEffort=True, # if the computation is too heavy, Earth Engine uses a coarser scale to make it succeed
-        maxPixels=1e9 # allow processing up to 1 billion pixels
-    ).getInfo() # bring the result from the Earth Engine
+        scale=10000,
+        bestEffort=True,
+        maxPixels=1e9
+    ).getInfo() or {}
 
-    # extract temperature (in Kelvin) and humidity from the result
-    temp_k = _safe_float(vals.get("temperature_2m_above_ground"), 0.0)
-    humidity = _safe_float(vals.get("relative_humidity_2m_above_ground"), 0.0)
+    temp_k = _safe_float(vals.get("temperature_2m"), 273.15)
+    dew_k = _safe_float(vals.get("dewpoint_temperature_2m"), 273.15)
 
-    # convert temperature from Kelvin to Celsius
-    temp_c = temp_k - 273.15 if temp_k else 0.0
+    temp_c = temp_k - 273.15
+    dew_c = dew_k - 273.15
 
-    # return rounded values
+    # Magnus formula
+    import math
+    es = 6.112 * math.exp((17.67 * temp_c) / (temp_c + 243.5))
+    e = 6.112 * math.exp((17.67 * dew_c) / (dew_c + 243.5))
+    rh = max(0, min(100, (e / es) * 100 if es else 0))
+
+    print("WEATHER VALUES:", vals)
+    print("ERA count:", era.size().getInfo())
+    print("FINAL WEATHER:", {
+        "temperature": round(temp_c, 2),
+        "humidity": round(rh, 2)
+    })
     return {
         "temperature": round(temp_c, 2),
-        "humidity": round(humidity, 2)
+        "humidity": round(rh, 2)
     }
-# -----------------------------------------------------------------------------------------------------    
+
 
 def _to_iso_from_millis(value_ms, fallback_iso=None):
     try:
@@ -205,13 +217,13 @@ def _to_iso_from_millis(value_ms, fallback_iso=None):
         return datetime.fromtimestamp(float(value_ms) / 1000.0, tz=timezone.utc).isoformat()
     except Exception:
         return fallback_iso # return the fallback value
-# -----------------------------------------------------------------------------------------------------    
+
 
 def _build_aoi(lat, lon, buffer_m):
     # create area around the selected point
     point = ee.Geometry.Point([lon, lat])
     return point.buffer(buffer_m).bounds()
-# -----------------------------------------------------------------------------------------------------    
+
 
 def _fallback_fire_image(end_dt):
     # fallback fire image when no image exists
@@ -220,7 +232,7 @@ def _fallback_fire_image(end_dt):
         .rename(["FireMask", "MaxFRP"])
         .set("system:time_start", end_dt.millis())
     )
-# -----------------------------------------------------------------------------------------------------    
+
 
 def _summarize_fire_product(aoi, start_dt, end_dt, product):
     # read product settings
@@ -338,7 +350,7 @@ def _summarize_fire_product(aoi, start_dt, end_dt, product):
         "frp_max": round(frp_value, 3),
         "dataset_time": _to_iso_from_millis(summary.get("dataset_time_ms"))
     }
-# -----------------------------------------------------------------------------------------------------    
+
 
 def _get_ndvi_mean(aoi, end_dt):
     # start the search 32 days before the given end date
@@ -359,11 +371,11 @@ def _get_ndvi_mean(aoi, end_dt):
         ee.Algorithms.If(
             ndvi_collection.size().gt(0),
             ndvi_collection.sort("system:time_start", False).first(),
-            fallback_ndvi # otherwise the fallback
+            fallback_ndvi  # otherwise the fallback
         )
     )
 
-    # /calculate the mean value
+    # calculate the mean value
     ndvi_mean_raw = _safe_number(
         latest_ndvi.select("NDVI").reduceRegion(
             reducer=ee.Reducer.mean(),
@@ -378,7 +390,7 @@ def _get_ndvi_mean(aoi, end_dt):
     # MODIS NDVI is scaled by 10000
     ndvi_mean = float(ndvi_mean_raw) * 0.0001
     return round(ndvi_mean, 3)
-# -----------------------------------------------------------------------------------------------------    
+
 
 def _get_lulc_class(aoi, ref_year):
     # load image collection
@@ -390,7 +402,7 @@ def _get_lulc_class(aoi, ref_year):
     # filter the collection to the requested year only
     lc_year = lc_all.filterDate(year_start, year_end)
 
-    # create a fallback land-cover image
+    # create a fallback land-cover imag
     fallback_lc = ee.Image(
         ee.Algorithms.If(
             lc_all.size().gt(0),
@@ -423,17 +435,14 @@ def _get_lulc_class(aoi, ref_year):
     # convert the returned value into a normal Python integer
     lc_class = int(float(lc_value or 0))
     return lc_class
-# -----------------------------------------------------------------------------------------------------    
 
 # return True if the land-cover class is in the list of burnable classes
 def _is_burnable_lulc(lulc_class):
     return lulc_class in BURNABLE_LULC_CLASSES
-# -----------------------------------------------------------------------------------------------------    
 
 # return True if the land-cover class is in the list of special classes
 def _is_special_lulc(lulc_class):
     return lulc_class in SPECIAL_LULC_CLASSES
-# -----------------------------------------------------------------------------------------------------    
 
 # group LULC into classes
 def _get_land_type_group(lulc_class):
@@ -448,7 +457,7 @@ def _get_land_type_group(lulc_class):
     if lulc_class == 16:
         return "sparse_vegetation"
     return "non_vegetation"
-# -----------------------------------------------------------------------------------------------------    
+
 
 def _get_ndvi_rule(ndvi_mean):
     if ndvi_mean >= NDVI_GOOD_THRESHOLD:
@@ -456,7 +465,7 @@ def _get_ndvi_rule(ndvi_mean):
     if ndvi_mean >= NDVI_LOW_THRESHOLD:
         return "weak_vegetation"
     return "very_low_vegetation"
-# -----------------------------------------------------------------------------------------------------    
+
 # count the number of the detected fire in the previous persistence window
 def _count_previous_fire_observations(aoi, ref_end_dt):
     previous_start_dt = ref_end_dt.advance(-(PERSISTENCE_DAYS + 2), "day")
@@ -469,7 +478,7 @@ def _count_previous_fire_observations(aoi, ref_end_dt):
         if result["is_detected"]:
             count += 1
     return count
-# -----------------------------------------------------------------------------------------------------    
+
 # pick the strongest source among active sources
 def _pick_primary_source(active_sources):
     if not active_sources:
@@ -482,7 +491,7 @@ def _pick_primary_source(active_sources):
         reverse=True
     )
     return sorted_sources[0]["source_name"]
-# -----------------------------------------------------------------------------------------------------    
+
 # create confidence label
 def _compute_fused_confidence(active_sources, ndvi_rule, lulc_burnable, persistence_confirmed):
     # the number of the fire sources are currently active
@@ -507,10 +516,10 @@ def _compute_fused_confidence(active_sources, ndvi_rule, lulc_burnable, persiste
         return "Medium"
 
     return "Low"
-# -----------------------------------------------------------------------------------------------------    
+
 
 def _final_decision(active_sources, lulc_burnable, special_lulc, persistence_confirmed, land_type_group):
-    sensor_count = len(active_sources) # number of sensors that detect fire
+    sensor_count = len(active_sources)
 
     if sensor_count == 0:
         return False, "لم يتم رصد أي حريق بواسطة المستشعرات"
@@ -524,8 +533,6 @@ def _final_decision(active_sources, lulc_burnable, special_lulc, persistence_con
         return False, "الأدلة ضعيفة في منطقة ذات غطاء نباتي متناثر"
 
     return False, "الحرارة المرصودة تقع خارج المناطق المرتبطة بالغطاء النباتي"
-# -----------------------------------------------------------------------------------------------------    
-
 
 # -----------------------------
 # CORE DETECTION FUNCTION
@@ -608,7 +615,6 @@ def _analyze_aoi(lat: float, lon: float, ref_dt, ref_iso, buffer_m):
         "fire_datetime": fire_datetime, # final displayed or saved fire time = request time
         "temperature": weather["temperature"],
         "humidity": weather["humidity"],
-      
         # fire summary
         "sensor_agreement_count": sensor_agreement_count,
         "fused_confidence": fused_confidence,
@@ -629,13 +635,17 @@ def _analyze_aoi(lat: float, lon: float, ref_dt, ref_iso, buffer_m):
         # source summaries
         "sources": sources
     }
-# -----------------------------------------------------------------------------------------------------    
 
 # Detect fire
 def detect_active_fire(lat: float, lon: float, when_iso=None):
     # convert request time to UTC.
     ref_dt = _coerce_utc_datetime(when_iso)
     ref_iso = ref_dt.isoformat()
+
+    print("TEST LAT:", lat)
+    print("TEST LON:", lon)
+    print("TEST INPUT TIME:", when_iso)
+    print("TEST UTC TIME:", ref_iso)
 
     # step 1: strict area around clicked point
     strict_result = _analyze_aoi(lat, lon, ref_dt, ref_iso, STRICT_BUFFER_M)
@@ -749,7 +759,7 @@ def detect_active_fire(lat: float, lon: float, when_iso=None):
         "persistence_confirmed": strict_result["persistence_confirmed"],
         "sources": strict_result["sources"]
     }
-# -----------------------------------------------------------------------------------------------------    
+
 
 # -----------------------------
 # ROUTE
@@ -758,10 +768,8 @@ def detect_active_fire(lat: float, lon: float, when_iso=None):
 @fire_detection_bp.route("/fire-detection", methods=["POST"])
 @login_required
 def fire_detection_route():
-
     # user UID comes from verified Firebase token
     user_id = g.user_uid
-
     data = request.get_json(silent=True) or {}
 
     lat = data.get("lat")

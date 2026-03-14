@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 import ee
 import traceback
+from auth_utils import login_required
 
 fire_threat_bp = Blueprint("fire_threat", __name__)
 
@@ -496,6 +497,7 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
 # Route يربطه بالفرونت
 # ======================
 @fire_threat_bp.route("/fire-threat", methods=["POST"])
+@login_required
 def fire_threat_route():
     print(">>> fire-threat route HIT")
 

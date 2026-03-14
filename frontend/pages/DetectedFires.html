@@ -54,10 +54,10 @@
         }
 
         .map-button {
-        width: 50%; /* the width is 50% of the container width */
-        font-size: 17px;
-        display: block;
-        margin: 0 auto; /* align the map button to center */
+            width: 50%; /* the width is 50% of the container width */
+            font-size: 17px;
+            display: block;
+            margin: 0 auto; /* align the map button to center */
         }
 
         .map-container {
@@ -259,7 +259,7 @@
     <!--Footer Section-->
     <footer class="footer">
             <div class="footer-content">
-                 <img src="../assets/images/wameed logo footer.svg" alt="Logo" style="margin-bottom: 8px;">
+                <img src="../assets/images/wameed logo footer.svg" alt="Logo" style="margin-bottom: 8px;">
 
                 <!-- copyright-->
                 <p class="copyright">© 2026 وميض - جميع الحقوق محفوظة</p>
@@ -273,6 +273,23 @@
         // initalize the map in varible map
         // L indicate leaflet library,and put the map in div that has the id=map
         // and the lan and lat is at riyadh, 5 indicate the zoom of the map
+        // -----------------------------------------------------------------------------
+        const API_BASE = "http://127.0.0.1:5000";
+
+        // -----------------------------
+        // TEST MODE
+        // -----------------------------
+        // خليها true لتجربة النقطة القديمة نفسها
+        // خليها false للرجوع للوضع الطبيعي واختيار نقطة من الخريطة
+        const TEST_MODE = true;
+
+        const TEST_POINT = {
+            lat: 19.123456,
+            lng: 41.987654,
+            datetime: "2025-05-10T14:20:00+03:00"
+        };
+        // -----------------------------------------------------------------------------
+        
         const map = L.map('map').setView([24.7136, 46.6753], 5); 
         // bring the layer of map from openstreetmap
         // addTo(map) we add the layer to map
@@ -280,7 +297,10 @@
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        
+        // -----------------------------------------------------------------------------
+        const currentDay = new Date().toISOString().split('T')[0];
+        const todayMarkers = [];
+        // -----------------------------------------------------------------------------
 
         // function to create detection item in HTML list
         function renderDetectionItem(dect) {
@@ -319,25 +339,29 @@
         }
         // ----------- Load detections for user from backend DB ----------------
         
-        const API_BASE = "http://127.0.0.1:5000"; // flask URL
-        const currentDay = new Date().toISOString().split('T')[0]; // date for today in normal format
+        // const API_BASE = "http://127.0.0.1:5000"; // flask URL
+        // const currentDay = new Date().toISOString().split('T')[0]; // today's date in YYYY-MM-DD format
 
-        // array for today markers on map
-        const todayMarkers = [];
+        // // array for today markers on map
+        // const todayMarkers = [];
 
         // function to convert date and time in ISO format 
         function toDateParts(iso) {
-            if (!iso) { // if ISO is null
-                const now = new Date();
-                return { 
-                date: now.toISOString().split('T')[0],
-                time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
-                };
+            // if (!iso) { // if ISO is null
+            //     const now = new Date();
+            //     return { 
+            //     date: now.toISOString().split('T')[0],
+            //     time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
+            //     };
+            // }
+
+            if (!iso) {
+                return { date: "-", time: "-" };
             }
 
             // clean possible milliseconds
-            const cleaned = String(iso).replace(/\.\d+/, "");
-            const d = new Date(cleaned);
+            // const cleaned = String(iso).replace(/\.\d+/, "");
+            const d = new Date(iso);
 
             // if date parsing fails return placeholders
             if (isNaN(d)) {
@@ -360,17 +384,21 @@
 
                 // detected_at which is date, time in ISO format
                 // support both detected_at and detected_At from database
-                const iso = row.detected_at || row.detected_At || null;
+                // const iso = row.Detected_At || null;
+                const iso =
+                row.detected_at ||
+                row.Detected_At ||
+                ((row.Date && row.Time) ? `${row.Date}T${row.Time}:00Z` : null);
 
                 const parts = toDateParts(iso); // convert ISO into normal format
 
                 // return detection data
                 return {
-                    id: row.id || null, // document id from backend
-                    name: row.Area_name || row.area_name || "منطقة غير معروفة", // support both field names
-                    lat: row.latitude ?? row.lat, // support latitude or lat
-                    lng: row.longitude ?? row.Longitude ?? row.lng, // support longitude variations
-                    fire: !!row.is_detected,
+                    id: row.Fire_ID || row.id || null, // document id from backend
+                    name: row.Area_name || "منطقة غير معروفة", // support both field names
+                    lat: row.latitude ?? row.Latitude ?? null, // support latitude or null
+                    lng: row.longitude ?? row.Longitude ?? null, // support longitude variations
+                    fire: !!(row.is_detected ?? row.Is_detected),
                     date: parts.date,
                     time: parts.time
                 };
@@ -584,20 +612,31 @@
 
         // function called when  user select 'تحديد' button
         async function definePrediction() {
+            console.log("definePrediction started");
 
             if (!auth.currentUser) {
                 // stop if no user is logged in
                 openMessagePopup("تنبيه", "يرجى تسجيل الدخول أولًا.");
                 return;
             }
-            if (!selectedCoordinations) { // if the user has not select the coordinations yet
+            if (!TEST_MODE && !selectedCoordinations) { // if the user has not select the coordinations yet
                 openMessagePopup("تنبيه", "الرجاء تحديد موقع على الخريطة");
                 return;
             }
 
             // extract latitude and longitude from the selected point
-            const lat = selectedCoordinations.lat;
-            const lng = selectedCoordinations.lng;
+            // const lat = selectedCoordinations.lat;
+            // const lng = selectedCoordinations.lng;
+
+            const requestLat = TEST_MODE ? TEST_POINT.lat : selectedCoordinations.lat;
+            const requestLng = TEST_MODE ? TEST_POINT.lng : selectedCoordinations.lng;
+            const requestDatetime = TEST_MODE ? TEST_POINT.datetime : null;
+            
+            console.log("about to call /fire-detection", {
+                lat: requestLat,
+                lon: requestLng,
+                datetime: requestDatetime
+            });
 
             closePopup(); // close the location selection popup
 
@@ -609,19 +648,32 @@
                     throw new Error("User is not logged in");
                 }   
                 // get readable area name from selected coordinates
-                const areaName = await reverseGeocode(lat, lng);
+                // const areaName = await reverseGeocode(lat, lng);
+
+                const areaName = await reverseGeocode(requestLat, requestLng);
+                const detectionPayload = {
+                    lat: requestLat,
+                    lon: requestLng,
+                    datetime: requestDatetime
+                };
 
                 // send selected coordinates to backend
                 const detectionRes = await fetch(`${API_BASE}/fire-detection`, {
                     method: "POST", headers: {
                         "Content-Type": "application/json",
                         "Authorization": `Bearer ${token}` },
-                    body: JSON.stringify({
-                        lat: lat, lon: lng })
+                    body: JSON.stringify(detectionPayload)
+                        // lat: lat,
+                        // lon: lng,
+                        // datetime: "2023-07-14T08:30:00Z"
+                    // })
                 });
 
                 // convert detection response to json
                 const detection = await detectionRes.json();
+                
+                console.log("Temp/Humidity before save:", detection.temperature, detection.humidity);
+                console.log("fire-detection response:", detection);
 
                 // if the detection request failed handle the error
                 if (!detectionRes.ok) {
@@ -636,52 +688,81 @@
                 }
 
                 // save the detection result in the detections collection
+                // const saveRes = await fetch(`${API_BASE}/api/detections`, {
+                //     method: "POST", headers: {
+                //         "Content-Type": "application/json", 
+                //         "Authorization": `Bearer ${token}` },
+                //     body: JSON.stringify({
+                //         lat: lat,
+                //         lng: lng,
+                //         area_name: areaName,
+                //         is_detected: detection.is_detected,
+                //         // base_detected: detection.base_detected,
+                //         detected_at: detection.detected_at,
+                //         // dataset_time: detection.dataset_time,
+                //         // fire_datetime: detection.fire_datetime,
+                //         temperature: detection.temperature,
+                //         humidity: detection.humidity,
+                //         severity: detection.severity || null,
+                //         spread_direction: detection.spread_direction || null,
+                //         burned_area: detection.burned_area || null,
+                //         // sensor_agreement_count: detection.sensor_agreement_count,
+                //         // fused_confidence: detection.fused_confidence,
+                //         // primary_source: detection.primary_source,
+                //         // total_fire_pixels: detection.total_fire_pixels,
+                //         // max_frp: detection.max_frp,
+                //         // decision_reason: detection.decision_reason,
+                //         // ndvi_mean: detection.ndvi_mean,
+                //         // ndvi_rule: detection.ndvi_rule,
+                //         // lulc_class: detection.lulc_class,
+                //         // lulc_name: detection.lulc_name,
+                //         // lulc_burnable: detection.lulc_burnable,
+                //         // previous_fire_observations: detection.previous_fire_observations,
+                //         // persistence_confirmed: detection.persistence_confirmed,
+                //         // sources: detection.sources
+                //     })
+                // });
+                const savePayload = {
+                    lat: requestLat,
+                    lng: requestLng,
+                    area_name: areaName,
+                    is_detected: detection.is_detected,
+                    detected_at: detection.detected_at,
+                    temperature: detection.temperature,
+                    humidity: detection.humidity,
+                    severity: detection.severity || null,
+                    spread_direction: detection.spread_direction || null,
+                    burned_area: detection.burned_area || null
+                };
+                console.log("fire-detection temp/humidity:", detection.temperature, detection.humidity);
+                console.log("savePayload:", savePayload);
+
                 const saveRes = await fetch(`${API_BASE}/api/detections`, {
-                    method: "POST", headers: {
-                        "Content-Type": "application/json", 
-                        "Authorization": `Bearer ${token}` },
-                    body: JSON.stringify({
-                        lat: lat,
-                        lng: lng,
-                        area_name: areaName,
-                        is_detected: detection.is_detected,
-                        base_detected: detection.base_detected,
-                        detected_at: detection.detected_at,
-                        dataset_time: detection.dataset_time,
-                        fire_datetime: detection.fire_datetime,
-                        temperature: detection.temperature,
-                        humidity: detection.humidity,
-                        sensor_agreement_count: detection.sensor_agreement_count,
-                        fused_confidence: detection.fused_confidence,
-                        primary_source: detection.primary_source,
-                        total_fire_pixels: detection.total_fire_pixels,
-                        max_frp: detection.max_frp,
-                        decision_reason: detection.decision_reason,
-                        ndvi_mean: detection.ndvi_mean,
-                        ndvi_rule: detection.ndvi_rule,
-                        lulc_class: detection.lulc_class,
-                        lulc_name: detection.lulc_name,
-                        lulc_burnable: detection.lulc_burnable,
-                        previous_fire_observations: detection.previous_fire_observations,
-                        persistence_confirmed: detection.persistence_confirmed,
-                        sources: detection.sources
-                    })
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`
+                    },
+                    body: JSON.stringify(savePayload)
                 });
 
                 // convert save response to json
                 const saveResult = await saveRes.json();
+                    console.log("save response:", saveResult);
+                    console.log("NEW FIRE ID:", saveResult.id);
 
                 // show error if saving failed
                 if (!saveRes.ok) {
                     throw new Error(saveResult.error || "Save failed");
                 }
-
+                // window.location.href = `Details.html?fire_id=${encodeURIComponent(saveResult.id)}`;
+                // return;
+                
                 // show success popup
                 if (detection.is_detected) { // when a fire detected
                     openMessagePopup(
                         "تم رصد حريق",
-                        `اسم المنطقة: ${areaName}\nالثقة: ${detection.fused_confidence}\nالمصدر الأساسي: ${detection.primary_source || "N/A"}\nالسبب: ${detection.decision_reason}`
-                    );
+                        `اسم المنطقة: ${areaName}\nالثقة: ${detection.fused_confidence}\nالمصدر الأساسي: ${detection.primary_source || "N/A"}\nالسبب: ${detection.decision_reason}`                    );
                 } else {
                     openMessagePopup( // when no fire detected
                         "لم يتم تأكيد حريق",

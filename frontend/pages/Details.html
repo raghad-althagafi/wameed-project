@@ -375,17 +375,22 @@
         <section class="grid">
             <div class="card">
                 <div class="label">اسم المنطقة</div>
-                <div class="value" id="region">الرياض</div>
-                <div class="sub-text">تاريخ الرصد: <span id="date">2026-01-27</span></div>
-                <div class="sub-text">وقت الرصد: <span id="time">09:14</span></div>
+                <!-- <div class="value" id="region">الرياض</div> -->
+                <!-- <div class="sub-text">تاريخ الرصد: <span id="date">2026-01-27</span></div>
+                <div class="sub-text">وقت الرصد: <span id="time">09:14</span></div> -->
+                <div class="value" id="region">-</div>
+                <div class="sub-text">تاريخ الرصد: <span id="date">-</span></div>
+                <div class="sub-text">وقت الرصد: <span id="time">-</span></div>
             </div>
             <div class="card">
                 <div class="label">درجة الحرارة</div>
-                <div class="value" dir="ltr"><span id="temp">25</span>° C</div>
+                <!-- <div class="value" dir="ltr"><span id="temp">25</span>° C</div> -->
+                <div class="value" dir="ltr"><span id="temp">-</span>° C</div>
             </div>
             <div class="card">
                 <div class="label">الرطوبة</div>
-                <div class="value" dir="ltr"><span id="hum">35</span> %</div>
+                <!-- <div class="value" dir="ltr"><span id="hum">35</span> %</div> -->
+                <div class="value" dir="ltr"><span id="hum">-</span> %</div>
             </div>
         </section>
 
@@ -411,7 +416,8 @@
 
             <div class="card">
                 <div class="label">المساحة المحترقة المقدرة</div>
-                <div class="value">2.3 كم²</div>
+                <!-- <div class="value">2.3 كم²</div> -->
+                <div class="value"><span id="burnedArea">-</span> كم²</div>
             </div>
         </section>
 
@@ -496,7 +502,7 @@
         </div>
     </div>
 
-    <script>
+    <!-- <script>
         // 1. Get URL Parameters (Data sent from the previous page)
         const params = new URLSearchParams(window.location.search);
 
@@ -764,7 +770,421 @@ Google Maps: ${googleMapsUrl}`;
                 prompt('انسخي النص التالي وارسليه:', text);
             }
         }
-    </script>
+    </script> -->
+
+    <script type="module">
+    import { getAuthToken } from "../js/auth.js";
+    import { auth } from "../js/firebase-config.js";
+    
+    const API_BASE = "http://127.0.0.1:5000";
+    const params = new URLSearchParams(window.location.search);
+    const fireId = params.get("fire_id");
+
+    let map = null;
+    let currentDetection = null;
+    let currentDetails = null;
+
+    // ===== Default weights =====
+    const DEFAULT_W = { fire: 0.40, spread: 0.30, exposure: 0.30 };
+    let currentW = { ...DEFAULT_W };
+
+    function setText(id, value) {
+        document.getElementById(id).textContent = (value != null && value !== "") ? value : "-";
+    }
+
+    function isoToParts(iso) {
+        if (!iso) return { date: "-", time: "-" };
+
+        const d = new Date(String(iso));
+        if (isNaN(d)) return { date: "-", time: "-" };
+
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        const hh = String(d.getHours()).padStart(2, "0");
+        const mi = String(d.getMinutes()).padStart(2, "0");
+
+        return {
+            date: `${yyyy}-${mm}-${dd}`,
+            time: `${hh}:${mi}`
+        };
+    }
+
+    function toggleInfo(el) {
+        el.classList.toggle("active");
+    }
+
+    window.toggleInfo = toggleInfo;
+
+    function initMap(lat, lng, regionName) {
+        if (map) {
+            map.remove();
+        }
+
+        const hasCoords = lat != null && lng != null && !isNaN(Number(lat)) && !isNaN(Number(lng));
+
+        map = L.map("map").setView(
+            hasCoords ? [Number(lat), Number(lng)] : [24.7136, 46.6753],
+            hasCoords ? 8 : 5
+        );
+
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png", {
+            maxZoom: 19
+        }).addTo(map);
+
+        if (hasCoords) {
+            const fireIcon = L.divIcon({
+                className: "custom-fire-marker",
+                html: `<div style="
+                    background-color: #E43411;
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 50%;
+                    border: 3px solid white;
+                    box-shadow: 0 3px 8px rgba(228, 52, 17, 0.5);
+                "></div>`,
+                iconSize: [20, 20]
+            });
+
+            const marker = L.marker([Number(lat), Number(lng)], { icon: fireIcon }).addTo(map);
+            marker.bindPopup(`
+                <div style="text-align: center; font-family: 'IBM Plex Sans Arabic', sans-serif; direction: rtl;">
+                    <strong style="font-size: 16px;">حريق مرصود</strong><br>
+                    <span style="font-size: 14px;">${regionName || "موقع الحريق"}</span>
+                </div>
+            `).openPopup();
+        }
+
+        setTimeout(() => map.invalidateSize(), 100);
+    }
+
+    async function fetchDetectionById(targetFireId) {
+        const token = await getAuthToken(true);
+        if (!token) {
+            throw new Error("User is not logged in");
+        }
+        
+        const res = await fetch(`${API_BASE}/api/detections/${encodeURIComponent(targetFireId)}`, {
+            method: "GET",
+            headers: {
+                "Authorization": `Bearer ${token}`
+            }
+        });
+
+        const result = await res.json();
+
+        if (!res.ok || !result.ok) {
+            throw new Error(result.error || "فشل تحميل بيانات الحريق");
+        }
+
+        return result.data;
+    }
+
+    async function saveFireDetails(payload) {
+        const token = await getAuthToken(true);
+
+        const res = await fetch(`${API_BASE}/api/detections/${fireId}/details`, {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await res.json();
+
+        if (!res.ok || !result.ok) {
+            throw new Error(result.error || "فشل تحديث تفاصيل الحريق");
+        }
+
+        currentDetails = result.data;
+    }
+
+    async function loadDetectionData() {
+        if (!fireId) {
+            throw new Error("لا يوجد fire_id في الرابط.");
+        }
+
+        currentDetection = await fetchDetectionById(fireId);
+        if (!currentDetection) {
+            throw new Error("لم يتم العثور على بيانات الحريق.");
+        }
+
+        currentDetails = currentDetection.FIRE_DETAILS?.[0] || null;
+
+        const parts = isoToParts(currentDetection.Detected_At);
+
+        setText("region", currentDetection.Area_name);
+        setText("date", parts.date);
+        setText("time", parts.time);
+        setText("temp", currentDetails?.Temperature);
+        setText("hum", currentDetails?.Humidity);
+        setText("threatLevel", currentDetails?.Severity || "جاري الحساب...");
+        setText("spreadDir", currentDetails?.Spread_Direction || "جاري الحساب...");
+        setText("burnedArea", currentDetails?.Burned_Area ?? "-");
+
+        initMap(
+            currentDetection.Latitude,
+            currentDetection.Longitude,
+            currentDetection.Area_name
+        );
+
+        await loadSpreadDirection();
+        await loadFireThreat();
+    }
+
+    async function loadSpreadDirection() {
+        if (currentDetails?.Spread_Direction) {
+            setText("spreadDir", currentDetails.Spread_Direction);
+            return;
+        }
+
+        // FIX: Use the actual coordinates from the detection, NOT the California ones
+        if (
+            currentDetection?.Latitude == null ||
+            currentDetection?.Longitude == null
+        ) {
+            setText("spreadDir", "غير متوفر");
+            return;
+        }
+
+        try {
+            // const whenIso = currentDetection.Detected_At;
+            const token = await getAuthToken(true);
+
+            const res = await fetch(`${API_BASE}/fire-spread-direction`, {
+                method: "POST",
+                headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    lat: currentDetection.Latitude,
+                    lon: currentDetection.Longitude,
+                    datetime: currentDetection.Detected_At
+                })
+            });
+
+            const data = await res.json();
+            // const spreadDirection = data.spread_direction_ar || null;
+            if (data.spread_direction_ar) {
+                await saveFireDetails({ Spread_Direction: data.spread_direction_ar });
+                setText("spreadDir", data.spread_direction_ar);
+            }
+
+        } catch (err) {
+            setText("spreadDir", "خطأ في الحساب");
+        }
+
+    }
+
+    async function loadFireThreat() {
+        if (currentDetails?.Severity) {
+            setText("threatLevel", currentDetails.Severity);
+            return;
+        }
+
+        if (
+            currentDetection?.Latitude == null ||
+            currentDetection?.Longitude == null
+        ) {
+            setText("threatLevel", "غير متوفر");
+            return;
+        }
+
+        try {
+            // const tempLat = 39.8139;
+            // const tempLng = -121.4340;
+            // const tempDate = "2018-11-08";
+            // const tempTime = "06:33";
+            const whenIso = currentDetection.Detected_At;
+            const token = await getAuthToken(true);
+
+            const res = await fetch(`${API_BASE}/fire-threat`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    lat: currentDetection.Latitude,
+                    lon: currentDetection.Longitude,
+                    datetime: whenIso,
+                    w_fire: currentW.fire,
+                    w_spread: currentW.spread,
+                    w_exposure: currentW.exposure
+                })
+            });
+
+            const threat = await res.json();
+            const severity = threat.threat_level ?? null;
+
+            if (severity) {
+                await saveFireDetails({ Severity: severity });
+                setText("threatLevel", severity);
+            } else {
+                setText("threatLevel", "غير متوفر");
+            }
+
+        } catch (err) {
+            console.error(err);
+            setText("threatLevel", "خطأ في الحساب");
+        }
+    }
+
+    function shareLocation() {
+        if (
+            currentDetection?.Latitude == null ||
+            currentDetection?.Longitude == null
+        ) {
+            alert("لا توجد إحداثيات محفوظة لهذا الحريق.");
+            return;
+        }
+
+        const latFixed = Number(currentDetection.Latitude).toFixed(6);
+        const lngFixed = Number(currentDetection.Longitude).toFixed(6);
+        const regionName = currentDetection?.Area_name || "موقع الحريق";
+
+        const googleMapsUrl = `https://www.google.com/maps?q=${latFixed},${lngFixed}`;
+
+        const text =
+`📍 موقع الحريق - وميض
+المنطقة: ${regionName}
+Latitude: ${latFixed}
+Longitude: ${lngFixed}
+Google Maps: ${googleMapsUrl}`;
+
+        if (navigator.share) {
+            navigator.share({
+                title: "موقع الحريق - وميض",
+                text: text,
+                url: googleMapsUrl
+            }).catch(() => {});
+            return;
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text)
+                .then(() => alert("تم نسخ موقع الحريق."))
+                .catch(() => prompt("انسخي النص التالي:", text));
+        } else {
+            prompt("انسخي النص التالي:", text);
+        }
+    }
+
+    window.shareLocation = shareLocation;
+
+    // ===== Modal Elements =====
+    const modal = document.getElementById("weightsModal");
+    const openBtn = document.getElementById("openWeightsBtn");
+    const closeBtn = document.getElementById("closeWeightsBtn");
+    const applyBtn = document.getElementById("applyWeightsBtn");
+    const resetBtn = document.getElementById("resetWeightsBtn");
+
+    const fireSlider = document.getElementById("fireWeight");
+    const spreadSlider = document.getElementById("spreadWeight");
+    const exposureSlider = document.getElementById("exposureWeight");
+
+    const fireVal = document.getElementById("fireWeightVal");
+    const spreadVal = document.getElementById("spreadWeightVal");
+    const exposureVal = document.getElementById("exposureWeightVal");
+
+    const weightsSum = document.getElementById("weightsSum");
+    const sumWarn = document.getElementById("sumWarn");
+
+    function openModal() {
+        modal.classList.add("show");
+        modal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeModal() {
+        modal.classList.remove("show");
+        modal.setAttribute("aria-hidden", "true");
+    }
+
+    function updateSliderUI() {
+        fireVal.textContent = fireSlider.value + "%";
+        spreadVal.textContent = spreadSlider.value + "%";
+        exposureVal.textContent = exposureSlider.value + "%";
+
+        const s = Number(fireSlider.value) + Number(spreadSlider.value) + Number(exposureSlider.value);
+        weightsSum.textContent = s + "%";
+        sumWarn.style.display = (s === 100) ? "none" : "inline";
+    }
+
+    function syncSlidersFromCurrent() {
+        fireSlider.value = Math.round(currentW.fire * 100);
+        spreadSlider.value = Math.round(currentW.spread * 100);
+        exposureSlider.value = Math.round(currentW.exposure * 100);
+        updateSliderUI();
+    }
+
+    openBtn?.addEventListener("click", () => {
+        syncSlidersFromCurrent();
+        openModal();
+    });
+
+    closeBtn?.addEventListener("click", closeModal);
+    modal?.addEventListener("click", (e) => {
+        if (e.target === modal) closeModal();
+    });
+
+    fireSlider?.addEventListener("input", updateSliderUI);
+    spreadSlider?.addEventListener("input", updateSliderUI);
+    exposureSlider?.addEventListener("input", updateSliderUI);
+
+    resetBtn?.addEventListener("click", () => {
+        currentW = { ...DEFAULT_W };
+        syncSlidersFromCurrent();
+    });
+
+    applyBtn?.addEventListener("click", async () => {
+        const s = Number(fireSlider.value) + Number(spreadSlider.value) + Number(exposureSlider.value);
+
+        if (s !== 100) {
+            alert("يجب أن يكون مجموع الأوزان 100٪.");
+            return;
+        }
+
+        currentW = {
+            fire: Number(fireSlider.value) / 100,
+            spread: Number(spreadSlider.value) / 100,
+            exposure: Number(exposureSlider.value) / 100
+        };
+
+        closeModal();
+
+        // Clear cached severity so it can be recalculated
+        if (currentDetails) {
+            currentDetails.Severity = null;
+        }
+
+        setText("threatLevel", "جاري الحساب...");
+        await loadFireThreat();
+    });
+
+    updateSliderUI();
+
+    // loadDetectionData().catch(err => {
+    //     console.error(err);
+    //     alert("تعذر تحميل تفاصيل الحريق.");
+    // });
+    auth.onAuthStateChanged(async (user) => {
+        try {
+            if (!user) {
+                window.location.href = "../pages/home-page.html";
+            return;
+        }
+            await loadDetectionData();
+        } catch (err) {
+            console.error("Details page error:", err);
+            alert("تعذر تحميل تفاصيل الحريق.");
+        };
+
+    });
+</script>
+
 </body>
 
 </html>

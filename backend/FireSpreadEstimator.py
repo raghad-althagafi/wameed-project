@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify # BluePrint, reguest for input data, jsonify for response
 import ee # google earth engine
 import math # sin, cos, atan
+from auth_utils import login_required
 
 fire_spread_bluePrint = Blueprint("fire_spread", __name__) # Blue print for fire spread
 
@@ -12,6 +13,7 @@ def _dir8_ar(angle_deg): # the function take the degree as input and convert the
     return dirs[int((_norm_deg(angle_deg) + 22.5) // 45) % 8]
 
 @fire_spread_bluePrint.route("/fire-spread-direction", methods=["POST"])
+@login_required
 def spread_direction():
 
      # read json
