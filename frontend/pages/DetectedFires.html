@@ -255,7 +255,6 @@
         </div>
     </div>
 
-
     <!--Footer Section-->
     <footer class="footer">
             <div class="footer-content">
@@ -270,24 +269,19 @@
     <script type="module">
         import { getAuthToken } from "../js/auth.js";
         import { auth } from "../js/firebase-config.js";
-        // initalize the map in varible map
-        // L indicate leaflet library,and put the map in div that has the id=map
-        // and the lan and lat is at riyadh, 5 indicate the zoom of the map
-        // -----------------------------------------------------------------------------
+
         const API_BASE = "http://127.0.0.1:5000";
 
         // -----------------------------
         // TEST MODE
         // -----------------------------
-        // خليها true لتجربة النقطة القديمة نفسها
-        // خليها false للرجوع للوضع الطبيعي واختيار نقطة من الخريطة
-        const TEST_MODE = true;
+        const TEST_MODE = false;
 
-        const TEST_POINT = {
-            lat: 19.123456,
-            lng: 41.987654,
-            datetime: "2025-05-10T14:20:00+03:00"
-        };
+        // const TEST_POINT = {
+        //     lat: 17.2508,
+        //     lng: 43.1165,
+        //     datetime: "2025-06-18T14:00:00+03:00"
+        // };
         // -----------------------------------------------------------------------------
         
         const map = L.map('map').setView([24.7136, 46.6753], 5); 
@@ -297,10 +291,10 @@
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        // -----------------------------------------------------------------------------
-        const currentDay = new Date().toISOString().split('T')[0];
+        const now = new Date();
+        const currentDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
         const todayMarkers = [];
-        // -----------------------------------------------------------------------------
 
         // function to create detection item in HTML list
         function renderDetectionItem(dect) {
@@ -337,30 +331,13 @@
 
             return item; // return the created element
         }
-        // ----------- Load detections for user from backend DB ----------------
-        
-        // const API_BASE = "http://127.0.0.1:5000"; // flask URL
-        // const currentDay = new Date().toISOString().split('T')[0]; // today's date in YYYY-MM-DD format
-
-        // // array for today markers on map
-        // const todayMarkers = [];
 
         // function to convert date and time in ISO format 
         function toDateParts(iso) {
-            // if (!iso) { // if ISO is null
-            //     const now = new Date();
-            //     return { 
-            //     date: now.toISOString().split('T')[0],
-            //     time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
-            //     };
-            // }
-
             if (!iso) {
                 return { date: "-", time: "-" };
             }
 
-            // clean possible milliseconds
-            // const cleaned = String(iso).replace(/\.\d+/, "");
             const d = new Date(iso);
 
             // if date parsing fails return placeholders
@@ -383,8 +360,6 @@
             function mapRowToDetection(row) {
 
                 // detected_at which is date, time in ISO format
-                // support both detected_at and detected_At from database
-                // const iso = row.Detected_At || null;
                 const iso =
                 row.detected_at ||
                 row.Detected_At ||
@@ -470,7 +445,7 @@
         // function that load detections from Backend
         async function loadDetectionsFromBackend() {
             try {
-                //encodeURIComponent to ensure USER_ID appear correctly in URL
+                // encodeURIComponent to ensure USER_ID appear correctly in URL
                 // get Firebase token for backend authorization
                 const token = await getAuthToken(true);
 
@@ -487,15 +462,11 @@
                     }
                 });
 
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                // if not successful throw new error to catch
+                if (!res.ok) throw new Error(`HTTP ${res.status}`); // if not successful throw new error to catch
 
                 const data = await res.json(); // convert response to JSON
 
-                console.log("detections response:", data);
-
                 const detections = (data.data || []).map(row => {
-                    console.log("row from backend:", row);
                     return mapRowToDetection(row);
                 }); // check every row to ensure it appear proberly
 
@@ -525,9 +496,6 @@
             }
         });
 
-        //---------------------------------------------------
-
-        
         let popupMap; // represent the map inside popup window
         let selectedMarker; // represent the marker 
         let selectedCoordinations = null; // represent the lan, lat that the user selects
@@ -558,7 +526,7 @@
                             iconSize: [20, 20]
                         });
 
-                         // L indicate leaflet library
+                        // L indicate leaflet library
                         // add the marker on map at e.latlng coordinations
                         //  it has the style of icon varible
                         // assign the value of selectedMarker so we can remove it later from map if needed
@@ -624,10 +592,6 @@
                 return;
             }
 
-            // extract latitude and longitude from the selected point
-            // const lat = selectedCoordinations.lat;
-            // const lng = selectedCoordinations.lng;
-
             const requestLat = TEST_MODE ? TEST_POINT.lat : selectedCoordinations.lat;
             const requestLng = TEST_MODE ? TEST_POINT.lng : selectedCoordinations.lng;
             const requestDatetime = TEST_MODE ? TEST_POINT.datetime : null;
@@ -646,9 +610,7 @@
 
                 if (!token) {
                     throw new Error("User is not logged in");
-                }   
-                // get readable area name from selected coordinates
-                // const areaName = await reverseGeocode(lat, lng);
+                }
 
                 const areaName = await reverseGeocode(requestLat, requestLng);
                 const detectionPayload = {
@@ -663,10 +625,6 @@
                         "Content-Type": "application/json",
                         "Authorization": `Bearer ${token}` },
                     body: JSON.stringify(detectionPayload)
-                        // lat: lat,
-                        // lon: lng,
-                        // datetime: "2023-07-14T08:30:00Z"
-                    // })
                 });
 
                 // convert detection response to json
@@ -687,41 +645,6 @@
                     }
                 }
 
-                // save the detection result in the detections collection
-                // const saveRes = await fetch(`${API_BASE}/api/detections`, {
-                //     method: "POST", headers: {
-                //         "Content-Type": "application/json", 
-                //         "Authorization": `Bearer ${token}` },
-                //     body: JSON.stringify({
-                //         lat: lat,
-                //         lng: lng,
-                //         area_name: areaName,
-                //         is_detected: detection.is_detected,
-                //         // base_detected: detection.base_detected,
-                //         detected_at: detection.detected_at,
-                //         // dataset_time: detection.dataset_time,
-                //         // fire_datetime: detection.fire_datetime,
-                //         temperature: detection.temperature,
-                //         humidity: detection.humidity,
-                //         severity: detection.severity || null,
-                //         spread_direction: detection.spread_direction || null,
-                //         burned_area: detection.burned_area || null,
-                //         // sensor_agreement_count: detection.sensor_agreement_count,
-                //         // fused_confidence: detection.fused_confidence,
-                //         // primary_source: detection.primary_source,
-                //         // total_fire_pixels: detection.total_fire_pixels,
-                //         // max_frp: detection.max_frp,
-                //         // decision_reason: detection.decision_reason,
-                //         // ndvi_mean: detection.ndvi_mean,
-                //         // ndvi_rule: detection.ndvi_rule,
-                //         // lulc_class: detection.lulc_class,
-                //         // lulc_name: detection.lulc_name,
-                //         // lulc_burnable: detection.lulc_burnable,
-                //         // previous_fire_observations: detection.previous_fire_observations,
-                //         // persistence_confirmed: detection.persistence_confirmed,
-                //         // sources: detection.sources
-                //     })
-                // });
                 const savePayload = {
                     lat: requestLat,
                     lng: requestLng,
@@ -734,7 +657,6 @@
                     spread_direction: detection.spread_direction || null,
                     burned_area: detection.burned_area || null
                 };
-                console.log("fire-detection temp/humidity:", detection.temperature, detection.humidity);
                 console.log("savePayload:", savePayload);
 
                 const saveRes = await fetch(`${API_BASE}/api/detections`, {
@@ -748,15 +670,11 @@
 
                 // convert save response to json
                 const saveResult = await saveRes.json();
-                    console.log("save response:", saveResult);
-                    console.log("NEW FIRE ID:", saveResult.id);
 
                 // show error if saving failed
                 if (!saveRes.ok) {
                     throw new Error(saveResult.error || "Save failed");
                 }
-                // window.location.href = `Details.html?fire_id=${encodeURIComponent(saveResult.id)}`;
-                // return;
                 
                 // show success popup
                 if (detection.is_detected) { // when a fire detected
@@ -772,7 +690,6 @@
 
                 // reload detections list after saving the new result
                 await loadDetectionsFromBackend();
-
 
             } catch (error) {
                 // handle any unexpected error

@@ -7,7 +7,7 @@ DETECTED_COLLECTION = "DETECTED_FIRE" # name of collection
 
 DETAILS_SUBCOLLECTION = "FIRE_DETAILS" # Subcollection name for fire details
 
-# Blue print for detections
+# Blueprint for detections
 detections_bp = Blueprint("detections_bp", __name__, url_prefix="/api/detections")
 
 
@@ -118,7 +118,6 @@ def _serialize_detection(doc_snapshot):
         "FIRE_DETAILS": [details_obj] if details_obj else []
     }
 
-
 # ---------- ROUTES ----------
 
 @detections_bp.route("", methods=["GET"]) # route for method GET
@@ -198,28 +197,6 @@ def api_create_detection():
             "error": "Missing area_name/is_detected/lat/lng"
         }), 400
     
-
-    # lat = payload.get("lat")
-    # lng = payload.get("lng")
-    # validate required fields
-    # if lat is None or lng is None or is_detected is None:
-    #     return jsonify({
-    #         "ok": False,
-    #         "error": "Missing lat/lng/is_detected"
-    #     }), 400
-    
-    # required fields from the request body
-    # lat = payload.get("lat")
-    # lng = payload.get("lng")
-    # is_detected = payload.get("is_detected")
-
-    # validate required fields
-    # if lat is None or lng is None or is_detected is None:
-    #     return jsonify({
-    #         "ok": False,
-    #         "error": "Missing lat/lng/is_detected"
-    #     }), 400
-
     # parse the detection time
     detected_at_dt = _parse_datetime(payload.get("detected_at"))
 
@@ -230,44 +207,8 @@ def api_create_detection():
     spread_direction = payload.get("spread_direction")
     burned_area = _to_float_or_none(payload.get("burned_area"))
 
-
     print("SAVE TEMP:", temperature)
     print("SAVE HUM:", humidity)
-                                    
-    # parse optional dataset timestamp if provided
-    # dataset_time_dt = (
-    #     _parse_datetime(payload.get("dataset_time"))
-    #     if payload.get("dataset_time") else None
-    # )
-
-    # choose the main event datetime
-    # event_dt = detected_at_dt
-
-    # Optional fields
-    # base_detected = _to_bool(payload.get("base_detected"))
-    # sensor_agreement_count = int(payload.get("sensor_agreement_count") or 0)
-    # fused_confidence = payload.get("fused_confidence") or "None"
-    # primary_source = payload.get("primary_source")
-    # total_fire_pixels = int(payload.get("total_fire_pixels") or 0)
-    # max_frp = float(payload.get("max_frp") or 0)
-    # decision_reason = payload.get("decision_reason")
-    # ndvi_mean = float(payload.get("ndvi_mean") or 0)
-    # ndvi_rule = payload.get("ndvi_rule")
-    # lulc_class = int(payload.get("lulc_class") or 0)
-    # lulc_name = payload.get("lulc_name")
-    # lulc_burnable = _to_bool(payload.get("lulc_burnable"))
-    # previous_fire_observations = int(payload.get("previous_fire_observations") or 0)
-    # persistence_confirmed = _to_bool(payload.get("persistence_confirmed"))
-    # sources = payload.get("sources") or []
-
-    # weather-related values
-    # temperature = float(payload.get("temperature") or 0)
-    # humidity = float(payload.get("humidity") or 0)
-
-    # # extra fire details
-    # severity = payload.get("severity")
-    # spread_direction = payload.get("spread_direction")
-    # burned_area = payload.get("burned_area")
 
     # get Firestore database instance
     db = FirebaseConnection.get_db() 
@@ -285,30 +226,6 @@ def api_create_detection():
         "Longitude": lng,
         "Is_detected": _to_bool(is_detected),
         "Detected_At": detected_at_dt,
-    
-        # "Date": event_dt.date().isoformat(),
-        # "Time": event_dt.strftime("%H:%M"),
-        # "latitude": float(lat),
-        # "longitude": float(lng),
-
-        # "base_detected": base_detected,
-        # "dataset_time": dataset_time_dt,
-        # "fire_datetime": event_dt,
-
-        # "sensor_agreement_count": sensor_agreement_count,
-        # "fused_confidence": str(fused_confidence),
-        # "primary_source": primary_source,
-        # "total_fire_pixels": total_fire_pixels,
-        # "max_frp": max_frp,
-        # "decision_reason": decision_reason,
-        # "ndvi_mean": ndvi_mean,
-        # "ndvi_rule": ndvi_rule,
-        # "lulc_class": lulc_class,
-        # "lulc_name": lulc_name,
-        # "lulc_burnable": lulc_burnable,
-        # "previous_fire_observations": previous_fire_observations,
-        # "persistence_confirmed": persistence_confirmed,
-        # "sources": sources
     }
 
     # save the main detection document into Firestore
@@ -317,7 +234,6 @@ def api_create_detection():
     # save detailed fire information if a fire was detected
     if _to_bool(is_detected):
         details_ref = doc_ref.collection(DETAILS_SUBCOLLECTION).document("details")
-        details_id = details_ref.id
 
         details_ref.set({
             "Details_ID": f"{fire_id}_details",
@@ -337,7 +253,6 @@ def api_create_detection():
         "id": fire_id,
         "message": "Detection saved successfully"
     }), 201
-
 
 @detections_bp.route("/<fire_id>/details", methods=["PATCH", "OPTIONS"])
 @login_required
@@ -437,46 +352,9 @@ def get_user_detections(user_id: str):
           .where("User_ID", "==", str(user_id))
           .stream()
     )
-    # from collection return all documents that "User_ID", "==", user_id
-    # stream is an iterator over returned documents
 
     results = [_serialize_detection(d) for d in docs]
 
-    # results = [] # array for predictions results after processing
-
-    # # loop for documents
-    # for d in docs:
-    #     data = d.to_dict() # convert document to dict
-    #     data["id"] = d.id # adding id
-
-    #     # convert datetime fields
-    #     data["Detected_At"] = _to_iso(data.get("Detected_At"))
-    #     # data["dataset_time"] = _to_iso(data.get("dataset_time"))
-    #     # data["fire_datetime"] = _to_iso(data.get("fire_datetime"))
-
-    #     # normalize bool values
-    #     data["Is_detected"] = _to_bool(data.get("Is_detected"))
-    #     # data["base_detected"] = _to_bool(data.get("base_detected"))
-    #     # data["lulc_burnable"] = _to_bool(data.get("lulc_burnable"))
-    #     # data["persistence_confirmed"] = _to_bool(data.get("persistence_confirmed"))
-
-    #     # read all fire detail documents
-    #     details_docs = d.reference.collection(DETAILS_SUBCOLLECTION).stream()
-    #     details_list = []
-
-    #     # process each fire detail document
-    #     for fd in details_docs:
-    #         fd_data = fd.to_dict() or {}
-    #         fd_data["id"] = fd.id
-    #         # fd_data["fire_datetime"] = _to_iso(fd_data.get("fire_datetime"))
-    #         details_list.append(fd_data)
-
-    #     # attach fire details list to the main detection document
-    #     data["FIRE_DETAILS"] = details_list
-
-
-    #     results.append(data) # append document to results array
-    
     # Sort newest first
     results.sort(key=lambda item: item.get("Detected_At") or "", reverse=True)
 

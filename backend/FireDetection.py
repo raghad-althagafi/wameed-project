@@ -4,7 +4,7 @@ import ee
 import traceback
 from auth_utils import login_required
 
-fire_detection_bp = Blueprint("fire_detection", __name__) # blueprint for the fire detection feature
+fire_detection_bp = Blueprint("fire_detection", __name__) # blueprint for the fire detection routes
 
 class OutsideSaudiError(Exception):
     pass
@@ -84,7 +84,7 @@ def _get_saudi_geometry():
     countries = ee.FeatureCollection("USDOS/LSIB_SIMPLE/2017")
     saudi_feature = countries.filter(ee.Filter.eq("country_na", "Saudi Arabia")).first()
 
-# if the feature is missing, this is an internal server issue
+    # if the feature is missing, this is an internal server issue
     if saudi_feature is None:
         raise RuntimeError("Saudi Arabia boundary was not found in GEE dataset.")
 
@@ -129,23 +129,30 @@ def _safe_number(value, default=0):
     return ee.Number(ee.Algorithms.If(value, value, default))
 
 # convert the value to float
-def _safe_float(value, default=0.0):
+def _safe_float(value, default=None):
     try:
         if value is None:
-            return float(default)
+            return default
         return float(value)
     except Exception:
-        return float(default)
+        return default
 
 def _get_gfs_weather(aoi, when_iso):
+    print(">>> _get_gfs_weather CALLED")
+    print(">>> when_iso:", when_iso)
+
     when_dt = _coerce_utc_datetime(when_iso)
     when = ee.Date(when_dt.isoformat())
+    # Use a larger area for weather because ERA5-Land is coarse resolution
+    weather_region = aoi.centroid(1).buffer(5000).bounds()
 
     era = (
         ee.ImageCollection("ECMWF/ERA5_LAND/HOURLY")
         .filterDate(when.advance(-2, "hour"), when.advance(2, "hour"))
-        .filterBounds(aoi)
+        .filterBounds(weather_region)
     )
+    print(">>> about to check ERA size")
+    print(">>> ERA size:", era.size().getInfo())
 
     fallback = ee.Image.constant([273.15, 0]).rename([
         "temperature_2m",
@@ -164,29 +171,28 @@ def _get_gfs_weather(aoi, when_iso):
         )
     )
 
-    # temperature from Kelvin to Celsius
-    temp_k = _safe_float(
-        img.reduceRegion(
-            reducer=ee.Reducer.mean(),
-            geometry=aoi,
-            scale=10000,
-            bestEffort=True,
-            maxPixels=1e9
-        ).get("temperature_2m").getInfo(),
-        273.15
-    )
-
-    # compute RH from dewpoint if direct RH band is unavailable
     vals = img.reduceRegion(
         reducer=ee.Reducer.mean(),
-        geometry=aoi,
-        scale=10000,
+        geometry=weather_region,
+        scale=9000,
         bestEffort=True,
         maxPixels=1e9
     ).getInfo() or {}
 
-    temp_k = _safe_float(vals.get("temperature_2m"), 273.15)
-    dew_k = _safe_float(vals.get("dewpoint_temperature_2m"), 273.15)
+    print(">>> WEATHER VALUES:", vals)
+
+    temp_k = _safe_float(vals.get("temperature_2m"), None)
+
+    # temp_k = _safe_float(vals.get("temperature_2m"), 273.15)
+    dew_k = _safe_float(vals.get("dewpoint_temperature_2m"), None)
+    
+    # If weather values are missing, return None instead of fake 0/100
+    if temp_k is None or dew_k is None:
+        print(">>> Weather values missing")
+        return {
+            "temperature": None,
+            "humidity": None
+        }
 
     temp_c = temp_k - 273.15
     dew_c = dew_k - 273.15
@@ -197,12 +203,11 @@ def _get_gfs_weather(aoi, when_iso):
     e = 6.112 * math.exp((17.67 * dew_c) / (dew_c + 243.5))
     rh = max(0, min(100, (e / es) * 100 if es else 0))
 
-    print("WEATHER VALUES:", vals)
-    print("ERA count:", era.size().getInfo())
-    print("FINAL WEATHER:", {
+    print(">>> FINAL WEATHER:", {
         "temperature": round(temp_c, 2),
         "humidity": round(rh, 2)
     })
+
     return {
         "temperature": round(temp_c, 2),
         "humidity": round(rh, 2)
@@ -350,7 +355,6 @@ def _summarize_fire_product(aoi, start_dt, end_dt, product):
         "frp_max": round(frp_value, 3),
         "dataset_time": _to_iso_from_millis(summary.get("dataset_time_ms"))
     }
-
 
 def _get_ndvi_mean(aoi, end_dt):
     # start the search 32 days before the given end date
@@ -641,11 +645,6 @@ def detect_active_fire(lat: float, lon: float, when_iso=None):
     # convert request time to UTC.
     ref_dt = _coerce_utc_datetime(when_iso)
     ref_iso = ref_dt.isoformat()
-
-    print("TEST LAT:", lat)
-    print("TEST LON:", lon)
-    print("TEST INPUT TIME:", when_iso)
-    print("TEST UTC TIME:", ref_iso)
 
     # step 1: strict area around clicked point
     strict_result = _analyze_aoi(lat, lon, ref_dt, ref_iso, STRICT_BUFFER_M)
