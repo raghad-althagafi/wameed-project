@@ -23,6 +23,12 @@ def spread_direction():
     lon = float(data.get("lon")) # take lon from json and convert it to float
     when_iso = data.get("datetime") # take datetime from json
 
+    print("SPREAD INPUT:", {
+        "lat": lat,
+        "lon": lon,
+        "datetime": when_iso
+    })
+
     # if datetimelat, lon missing it will return error message
     if lat is None or lon is None or not when_iso:
         return jsonify({"error": "Missing lat/lon/datetime"}), 400
@@ -113,5 +119,18 @@ def spread_direction():
     alpha = math.degrees(math.atan2(Y, X))
     spread_bearing = _norm_deg(upslope_deg + alpha)
     spread_text = _dir8_ar(spread_bearing) # convert the result into arabic text represnt the direction
+
+    print("SPREAD DEBUG:", {
+        "slope_deg": slope_deg,
+        "upslope_deg": upslope_deg,
+        "u_val": u_val,
+        "v_val": v_val,
+        "wind_to_deg": wind_to_deg,
+        "wind_speed": wind_speed,
+        "omega_deg": math.degrees(omega),
+        "alpha_deg": alpha,
+        "spread_bearing": spread_bearing,
+        "spread_text": spread_text
+    })
 
     return jsonify({"spread_direction_ar": spread_text}), 200 # return the direction text only

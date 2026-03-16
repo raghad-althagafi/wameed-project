@@ -683,6 +683,12 @@
             // const whenIso = currentDetection.Detected_At;
             const token = await getAuthToken(true);
 
+            console.log("SPREAD PAYLOAD FROM DETAILS:", {
+            lat: currentDetection.Latitude,
+            lon: currentDetection.Longitude,
+            datetime: currentDetection.Detected_At
+        });
+
             const res = await fetch(`${API_BASE}/fire-spread-direction`, {
                 method: "POST",
                 headers: {
