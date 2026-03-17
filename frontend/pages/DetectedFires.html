@@ -267,7 +267,7 @@
     
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script> <!-- import library for interactive maps -->
     <script type="module">
-        import { getAuthToken } from "../js/auth.js";
+        import { getAuthToken } from "../js/auth.js"; //import functions
         import { auth } from "../js/firebase-config.js";
 
         const API_BASE = "http://127.0.0.1:5000";
@@ -275,12 +275,12 @@
         // -----------------------------
         // TEST MODE
         // -----------------------------
-        const TEST_MODE = false;
+        const TEST_MODE = false; 
 
-        // const TEST_POINT = {
-        //     lat: 17.2508,
-        //     lng: 43.1165,
-        //     datetime: "2025-06-18T14:00:00+03:00"
+         //const TEST_POINT = {
+        //     lat: 19.879,
+        //     lng: 41.441,
+        //     datetime: "2023-06-22T14:30:00+03:00"
         // };
         // -----------------------------------------------------------------------------
         
@@ -292,9 +292,9 @@
         }).addTo(map);
 
         const now = new Date();
-        const currentDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+        const currentDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`; // get today date in YYYY-MM-DD format
 
-        const todayMarkers = [];
+        const todayMarkers = []; //today markers on map
 
         // function to create detection item in HTML list
         function renderDetectionItem(dect) {
@@ -332,13 +332,13 @@
             return item; // return the created element
         }
 
-        // function to convert date and time in ISO format 
+        // function to convert date and time in ISO format into seperate date and time 
         function toDateParts(iso) {
-            if (!iso) {
+            if (!iso) { // if there is no date and time return -, -
                 return { date: "-", time: "-" };
             }
 
-            const d = new Date(iso);
+            const d = new Date(iso); //create date object
 
             // if date parsing fails return placeholders
             if (isNaN(d)) {
@@ -356,7 +356,7 @@
             return { date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${mi}` };
         }
 
-            // unifie data from backend
+            // unifie detected fire data from backend
             function mapRowToDetection(row) {
 
                 // detected_at which is date, time in ISO format
@@ -367,13 +367,13 @@
 
                 const parts = toDateParts(iso); // convert ISO into normal format
 
-                // return detection data
+                // return detection data object
                 return {
                     id: row.Fire_ID || row.id || null, // document id from backend
                     name: row.Area_name || "منطقة غير معروفة", // support both field names
                     lat: row.latitude ?? row.Latitude ?? null, // support latitude or null
                     lng: row.longitude ?? row.Longitude ?? null, // support longitude variations
-                    fire: !!(row.is_detected ?? row.Is_detected),
+                    fire: !!(row.is_detected ?? row.Is_detected), // status of detection
                     date: parts.date,
                     time: parts.time
                 };
@@ -426,15 +426,16 @@
             const todayDetections = detections.filter(d => d.date === currentDay); // filter today detections
             const previousDetections = detections.filter(d => d.date !== currentDay); // filter previous detections
 
+            // if there is no detections for today
             if (todayDetections.length === 0) {
                 todayContainer.innerHTML = `<div class="detection-date">لا توجد عمليات رصد لليوم</div>`;
-            } else {
+            } else { // display today detctions
                 todayDetections.forEach(d => todayContainer.appendChild(renderDetectionItem(d)));
             }
-
+            // if there is no detections for previous
             if (previousDetections.length === 0) {
                 previousContainer.innerHTML = `<div class="detection-date">لا توجد عمليات رصد سابقة</div>`;
-            } else {
+            } else { // display previous detctions
                 previousDetections.forEach(d => previousContainer.appendChild(renderDetectionItem(d)));
             }
 
@@ -447,14 +448,14 @@
             try {
                 // encodeURIComponent to ensure USER_ID appear correctly in URL
                 // get Firebase token for backend authorization
-                const token = await getAuthToken(true);
+                const token = await getAuthToken(true); //get token for the user
 
                 // if there is no logged-in user
                 if (!token) {
                     throw new Error("User is not logged in");
                 }
 
-                // send request to backend with Firebase token
+                // send request to backend with Firebase token to return user detections
                 const res = await fetch(`${API_BASE}/api/detections`, {
                     method: "GET",
                     headers: {
@@ -466,25 +467,27 @@
 
                 const data = await res.json(); // convert response to JSON
 
+                // unifie all detections data
                 const detections = (data.data || []).map(row => {
                     return mapRowToDetection(row);
                 }); // check every row to ensure it appear proberly
 
-                // display detections in the page
+                // display all user detections in the page
                 renderLists(detections);
-            } catch (err) {
+            } catch (err) { // if there is an error
                 const todayContainer = document.getElementById('todayDetections');
                 const previousContainer = document.getElementById('previousDetections');
                 todayContainer.innerHTML = `<div class="detection-date">تعذر تحميل الرصد</div>`;
                 previousContainer.innerHTML = ``;
-                console.error(err);
+                console.error(err); //print the error
             }
         }
 
+        //check if user logged in
         auth.onAuthStateChanged((user) => {
-            if (user) {
-                loadDetectionsFromBackend();
-            } else {
+            if (user) { // if user logged in 
+                loadDetectionsFromBackend(); //load user detections
+            } else { // if user is not logged in 
 
                 // get containers
                 const todayContainer = document.getElementById('todayDetections');
@@ -578,6 +581,7 @@
             return areaName;
         }
 
+        // ---------------- Detection function --------------------
         // function called when  user select 'تحديد' button
         async function definePrediction() {
             console.log("definePrediction started");
@@ -606,7 +610,7 @@
 
             try {
                 // get Firebase token for protected backend routes
-                const token = await getAuthToken(true);
+                const token = await getAuthToken(true); 
 
                 if (!token) {
                     throw new Error("User is not logged in");
@@ -717,7 +721,7 @@
             }
         }
 
-        // make functions accessible from HTML onclick
+        // make functions accessible and visible from HTML onclick
         window.openPopup = openPopup;
         window.closePopup = closePopup;
         window.closePopupOnOverlay = closePopupOnOverlay;

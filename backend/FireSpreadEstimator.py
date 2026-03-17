@@ -16,13 +16,14 @@ def _dir8_ar(angle_deg): # the function take the degree as input and convert the
 @login_required
 def spread_direction():
 
-     # read json
+     # read data from frontend
     data = request.get_json(silent=True) or {}
 
     lat = float(data.get("lat")) # take lat from json and convert it to float
     lon = float(data.get("lon")) # take lon from json and convert it to float
     when_iso = data.get("datetime") # take datetime from json
 
+    # print data to make sure
     print("SPREAD INPUT:", {
         "lat": lat,
         "lon": lon,
@@ -69,7 +70,7 @@ def spread_direction():
     upslope_deg = float(vals.get("upslope") or 0.0)
 
     # -------- wind from NOAA GFS0P25 --------
-    region_wind = point.buffer(15000).bounds() # convert it into bigger region for wind (better with coarse models)
+    region_wind = point.buffer(5000).bounds() # convert it into bigger region for wind (better with coarse models)
 
     gfs = ee.ImageCollection("NOAA/GFS0P25")
 

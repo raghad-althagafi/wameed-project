@@ -660,18 +660,20 @@
             currentDetection.Area_name
         );
 
-        await loadSpreadDirection();
+        await loadSpreadDirection(); // call spread direction function
         await loadFireThreat();
     }
 
+    // -------------------- spread direction --------------------------
     async function loadSpreadDirection() {
-        if (currentDetails?.Spread_Direction) {
-            setText("spreadDir", currentDetails.Spread_Direction);
-            return;
+        // if spread direction for this fire was  saved in DB
+        if (currentDetails?.Spread_Direction) { 
+            setText("spreadDir", currentDetails.Spread_Direction); // then only display it
+            return; // and not calculate
         }
 
         // Use the saved detection coordinates to calculate spread direction
-        if (
+        if ( // if the coordinations not found
             currentDetection?.Latitude == null ||
             currentDetection?.Longitude == null
         ) {
@@ -681,14 +683,16 @@
 
         try {
             // const whenIso = currentDetection.Detected_At;
-            const token = await getAuthToken(true);
+            const token = await getAuthToken(true); // get token
 
+            // print data to make sure
             console.log("SPREAD PAYLOAD FROM DETAILS:", {
             lat: currentDetection.Latitude,
             lon: currentDetection.Longitude,
             datetime: currentDetection.Detected_At
         });
 
+            // send request to backend to calculate spread direction 
             const res = await fetch(`${API_BASE}/fire-spread-direction`, {
                 method: "POST",
                 headers: {
@@ -702,14 +706,14 @@
                 })
             });
 
-            const data = await res.json();
+            const data = await res.json(); // recieve the response
             // const spreadDirection = data.spread_direction_ar || null;
-            if (data.spread_direction_ar) {
-                await saveFireDetails({ Spread_Direction: data.spread_direction_ar });
-                setText("spreadDir", data.spread_direction_ar);
+            if (data.spread_direction_ar) { // if direction returned 
+                await saveFireDetails({ Spread_Direction: data.spread_direction_ar }); // save the result 
+                setText("spreadDir", data.spread_direction_ar); // display it 
             }
 
-        } catch (err) {
+        } catch (err) { // in case of error
             setText("spreadDir", "خطأ في الحساب");
         }
 

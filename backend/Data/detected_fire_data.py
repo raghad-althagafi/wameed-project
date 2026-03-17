@@ -121,22 +121,22 @@ def _serialize_detection(doc_snapshot):
 # ---------- ROUTES ----------
 
 @detections_bp.route("", methods=["GET"]) # route for method GET
-@login_required
+@login_required # take user token and check it
 def api_get_detections(): # the function will be excuted
 
-    user_id = g.user_uid # return User_Id from Firebase token
+    user_id = g.user_uid # get user id from the token
     
     # call get_user_detections function to return user detections
     detections = get_user_detections(user_id)
 
-    if not detections:
+    if not detections: # if there is no detections
         return jsonify({
             "ok": True,
             "message": "No detections found",
             "data": []
         }), 200
 
-    return jsonify({
+    return jsonify({ # return detections
         "ok": True,
         "data": detections
     }), 200
@@ -347,13 +347,13 @@ def api_update_detection_details(fire_id):
 def get_user_detections(user_id: str):
     db = FirebaseConnection.get_db() # get Firebase Connection
 
-    docs = (
+    docs = ( # return user documents for fire detections
         db.collection(DETECTED_COLLECTION)
           .where("User_ID", "==", str(user_id))
           .stream()
     )
 
-    results = [_serialize_detection(d) for d in docs]
+    results = [_serialize_detection(d) for d in docs] # convert every doc into object
 
     # Sort newest first
     results.sort(key=lambda item: item.get("Detected_At") or "", reverse=True)
