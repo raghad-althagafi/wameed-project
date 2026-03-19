@@ -61,6 +61,7 @@ def spread_direction():
     ).get("aspect") # return the aspect mean foe the region
 
     upslope = ee.Number(aspect).add(180).mod(360) # convert the aspect into upslope by adding 180 degree
+    
 
     # Fetch values from google earth engine into python
     vals = ee.Dictionary({"slope": slope, "upslope": upslope}).getInfo()
@@ -68,6 +69,7 @@ def spread_direction():
     # convert values into float
     slope_deg = float(vals.get("slope") or 0.0)
     upslope_deg = float(vals.get("upslope") or 0.0)
+    upslope_text = _dir8_ar(upslope_deg)
 
     # -------- wind from NOAA GFS0P25 --------
     region_wind = point.buffer(5000).bounds() # convert it into bigger region for wind (better with coarse models)
@@ -85,14 +87,14 @@ def spread_direction():
     u = ee.Image(gfs_img).select("u_component_of_wind_10m_above_ground").reduceRegion(
         reducer=ee.Reducer.mean(),
         geometry=region_wind,
-        scale=30000,
+        scale=10000,
         bestEffort=True
     ).get("u_component_of_wind_10m_above_ground") # get the u component for wind which reflect wind speed East/West
 
     v = ee.Image(gfs_img).select("v_component_of_wind_10m_above_ground").reduceRegion(
         reducer=ee.Reducer.mean(),
         geometry=region_wind,
-        scale=30000,
+        scale=10000,
         bestEffort=True
     ).get("v_component_of_wind_10m_above_ground") # get the v component for wind which reflect wind speed north/south
 
@@ -104,6 +106,7 @@ def spread_direction():
     v_val = float(vals_wind.get("v") or 0.0)
 
     wind_to_deg = _norm_deg(math.degrees(math.atan2(u_val, v_val))) # wind direction
+    wind_text = _dir8_ar(wind_to_deg)
     wind_speed = math.sqrt(u_val*u_val + v_val*v_val) # wind speed
 
     # calculate the diffrence between wind_to_deg and upslope_deg,
@@ -124,9 +127,11 @@ def spread_direction():
     print("SPREAD DEBUG:", {
         "slope_deg": slope_deg,
         "upslope_deg": upslope_deg,
+        "upslope_text": upslope_text,
         "u_val": u_val,
         "v_val": v_val,
         "wind_to_deg": wind_to_deg,
+        "wind_text": wind_text,
         "wind_speed": wind_speed,
         "omega_deg": math.degrees(omega),
         "alpha_deg": alpha,
