@@ -139,13 +139,6 @@
             display: flex; /* the background appear when popup window opened */
         }
 
-        .popup-window {
-            background-color: white;
-            border-radius: 20px;
-            padding: 30px;
-            width: 450px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-        }
 
         .popup-header {
             text-align: center;
@@ -169,13 +162,45 @@
             height: 100%;
         }
 
-        .popup-buttons {
-            display: flex; /* elements beside other */
-            gap: 15px;
-        }
 
         .popup-buttons button {
             flex: 1; /* buttons have same width */
+        }
+
+        .message-popup-body {
+            white-space: pre-line;
+            text-align: right;
+            font-size: 16px;
+            line-height: 1.9;
+            margin-bottom: 24px;
+        }
+
+        .popup-window {
+            width: 450px;
+            max-width: 90%;
+            background: white;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            padding: 28px 24px 24px;
+        }
+
+        .popup-buttons {
+            display: flex; /* elements beside other */
+            justify-content: center;
+            margin-top: 8px;
+        }
+
+        .status-low {
+            background-color: #f3c660;
+        }
+
+        .status-medium {
+            background-color: #ee930a;
+        }
+
+        .status-high {
+            background-color: #E43411;
         }
     </style>
 </head>
@@ -201,6 +226,7 @@
         <div class="right-section"> <!-- right section -->
             <h1>التنبؤ بالحرائق</h1> <!-- title -->
             <p class="subtitle">مدة التنبؤ: في الساعات 3–6 القادمة</p> <!-- subTitle -->
+            <p class="subtitle">التنبؤ يأخذ بضع ثواني</p> <!-- subTitle -->
 
             <!-- list for predictions of today -->
             <div class="predictions-header">تنبؤات اليوم</div> <!-- title -->
@@ -223,6 +249,17 @@
             <div class="popup-buttons">
                 <button class="main-button" onclick="closePopup()">إلغاء</button>
                 <button class="main-button" onclick="definePrediction()">تحديد</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Popup window for alerts -->
+    <div class="popup-overlay" id="messagePopupOverlay" onclick="closeMessagePopupOnOverlay(event)">
+        <div class="popup-window" onclick="event.stopPropagation()">
+            <div class="popup-header" id="messagePopupTitle">تنبيه</div>
+            <div class="message-popup-body" id="messagePopupText"></div>
+            <div class="popup-buttons">
+                <button class="main-button" onclick="closeMessagePopup()">حسنًا</button>
             </div>
         </div>
     </div>
@@ -252,7 +289,44 @@
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        
+        // function to determine the prediction status style and text
+        function getPredictionStatus(pred) {
+            // get the risk level
+            const level = String(pred?.riskLevel || "").toLowerCase().trim();
+
+            if (level === "high") {
+                return {
+                    badgeClass: "status-high",
+                    badgeText: "خطر حريق مرتفع",
+                    markerColor: "#E43411"
+                };
+            }
+
+            else if (level === "medium") {
+                return {
+                    badgeClass: "status-medium",
+                    badgeText: "خطر حريق متوسط",
+                    markerColor: "#ee930a"
+                };
+            }
+
+            else if (level === "low") {
+                return {
+                    badgeClass: "status-low",
+                    badgeText: "خطر حريق منخفض",
+                    markerColor: "#f3c660"
+                };
+            }
+
+            // fallback for any unknown status
+            return {
+                badgeClass: "status-safe",
+                badgeText: "غير محدد",
+                markerColor: "#999999"
+            }
+
+        }
+
 
         // function to create prediction item in HTML list
         function renderPredictionItem(pred) {
@@ -260,15 +334,17 @@
             const item = document.createElement('div');
             item.className = 'prediction-item'; 
 
-            // determine the badge class and text based on fire status
-            const badgeClass = pred.fire ? 'status-fire' : 'status-safe'; // choose red or green badge based on status
-            const badgeText = pred.fire ? 'متنبأ بحدوث حريق' : 'غير متنبأ بحدوث حريق'; // badge text
+            // // determine the badge class and text based on fire status
+            // const badgeClass = 'status-medium'; //pred.fire ? 'status-fire' : 'status-safe'; // choose red or green badge based on status
+            // const badgeText = pred.riskLabelAr || 'خطر حريق متوسط'; // ? 'متنبأ بحدوث حريق' : 'غير متنبأ بحدوث حريق'; // badge text
+
+            const status = getPredictionStatus(pred);
 
             // build the prediction item HTML structure
             item.innerHTML = `
                 <div class="prediction-header">
                     <span class="area-name">${pred.name}</span>
-                    <span class="status-badge ${badgeClass}">${badgeText}</span>
+                    <span class="status-badge ${status.badgeClass}">${status.badgeText}</span>
                 </div>
                 <div class="prediction-date">تاريخ التنبؤ: ${pred.date}</div>
                 <div class="prediction-date">وقت التنبؤ: ${pred.time}</div>
@@ -316,17 +392,18 @@
             };
         }
 
-        // unifie data from backend
+        // function to unify prediction row data from backend
         function mapRowToPrediction(row) {
-            const iso = row.predicted_at; // predicted_at which is date, time in ISO format
-            const parts = toDateParts(iso); // convert ISO into normal format
+            const iso = row.predicted_at || row.Predicted_at || row.predictedAt;
+            const parts = toDateParts(iso); // convert it to separate date and time
 
-            // return prediction data
             return {
-                name: row.Area_name || 'منطقة غير معروفة',
-                lat: row.latitude,
-                lng: row.Longitude,
+                name: row.Area_name || "منطقة غير معروفة",
+                lat: row.latitude ?? null,
+                lng: row.Longitude ?? null,
                 fire: row.is_Predicted === true,
+                riskLevel: row.risk_level || "safe",
+                probability: row.probability ?? null,
                 date: parts.date,
                 time: parts.time
             };
@@ -345,10 +422,20 @@
 
             // loop for today precidtiond
             todayPredictions.forEach(pred => {
+                // skip this prediction if a value is missing
+                if (
+                    pred.lat == null || pred.lng == null ||
+                    isNaN(Number(pred.lat)) || isNaN(Number(pred.lng))
+                ) {
+                    return;
+                }
+
+                const status = getPredictionStatus(pred);
+
                 const icon = L.divIcon({
                     className: 'custom-marker',
-                    // if pred.fire == true marker would be red, if its false marker would be green
-                    html: `<div style="background-color: ${pred.fire ? '#E43411' : '#5cb85c'}; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>`,
+                    // get the marker color depends on the status
+                    html: `<div style="background-color: ${status.markerColor}; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>`,
                     iconSize: [20, 20]
                 }); // create icon
 
@@ -492,23 +579,27 @@
             }
         }
 
-        // function called when  user select 'تحديد' button
+         // function called when user select تحديد button
         async function definePrediction() {
-
+            // if user did not choose any point on popup map
             if (!selectedCoordinations) {
-                alert('الرجاء تحديد موقع على الخريطة');
+                openMessagePopup("تنبيه", "الرجاء تحديد موقع على الخريطة");
                 return;
             }
-            // نحاول نجيب اسم الموقع من OpenStreetMap
+
+            // default name if reverse geocoding does not return a place name
             let areaName = "موقع غير معروف";
 
             try {
+                // send request to OpenStreetMap service to get area name from selected coordinates
                 const geoRes = await fetch(
                     `https://nominatim.openstreetmap.org/reverse?format=json&accept-language=ar&lat=${selectedCoordinations.lat}&lon=${selectedCoordinations.lng}`
                 );
 
+                // convert response to JSON
                 const geoData = await geoRes.json();
 
+                // if address exists, choose the best available place name
                 if (geoData.address) {
                     areaName =
                         geoData.address.city ||
@@ -517,62 +608,160 @@
                         geoData.address.county ||
                         geoData.address.state ||
                         "موقع محدد";
-
                 }
-
             } catch (e) {
+                // if reverse geocoding fails, keep the default area name
                 console.log("لم يتم جلب اسم الموقع");
             }
 
+            // close popup window after location selection
+            closePopup();
+
             try {
+                // get Firebase token for backend authorization
+                const token = await getAuthToken(true);
 
-                const payload = {
-                lat: selectedCoordinations.lat,
-                lng: selectedCoordinations.lng,
-                area_name: areaName
-            };
-
-            // get Firebase token for backend authorization
-            const token = await getAuthToken(true);
-
-            // if there is no logged-in user
-            if (!token) {
-                alert("الرجاء تسجيل الدخول أولاً");
-                return;
-            }
-
-            const res = await fetch(`${API_BASE}/api/predictions`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`
-                },
-                body: JSON.stringify(payload)
-            });
-
-                if (!res.ok) {
-                    throw new Error(`HTTP ${res.status}`);
+                // if there is no logged-in user
+                if (!token) {
+                    openMessagePopup("تنبيه", "يرجى تسجيل الدخول أولًا.");
+                    return;
                 }
 
-                const data = await res.json();
+                // run prediction using the user-selected coordinates
+                const predictionRes = await fetch(`${API_BASE}/fire-prediction`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        lat: selectedCoordinations.lat,
+                        lon: selectedCoordinations.lng
+                    })
+                });
 
-                alert("تم حفظ طلب التنبؤ بنجاح");
+                // convert prediction response to JSON
+                const predictionData = await predictionRes.json();
 
-                closePopup();
+                // print returned data in console for debugging
+                console.log("predictionData:", predictionData);
+                console.log("features:", predictionData.features);
+                console.log("Selected latitude:", selectedCoordinations.lat);
+                console.log("Selected longitude:", selectedCoordinations.lng);
+                // console.log("probability:", predictionData.probability);
 
-                // إعادة تحميل القائمة بعد الحفظ
+                // if backend response is not successful
+                if (!predictionRes.ok) {
+                    // if selected point is outside Saudi Arabia
+                    if (predictionData.error === "outside_saudi") {
+                        openMessagePopup("تنبيه", "نعتذر، الخدمة متوفرة داخل حدود المملكة العربية السعودية فقط.");
+                        return;
+                    }
+
+                    // throw error for any other backend problem
+                    throw new Error(predictionData.details || predictionData.message || `HTTP ${predictionRes.status}`);
+                }
+
+                // if selected point is outside forest scope
+                if (predictionData.status === "outside_forest_scope") {
+                    openMessagePopup("خارج نطاق التنبؤ", predictionData.message_ar);
+                    return;
+                }
+
+                // if NDVI data is unavailable
+                if (predictionData.status === "ndvi_unavailable") {
+                    openMessagePopup("تعذر التنبؤ", predictionData.message_ar);
+                    return;
+                }
+
+                // prepare prediction data to save in backend database
+                const savePayload = {
+                    area_name: areaName,
+                    lat: selectedCoordinations.lat,
+                    lng: selectedCoordinations.lng,
+                    is_predicted: predictionData.is_predicted,
+                    predicted_at: predictionData.predicted_at,
+                    risk_level: predictionData.risk_level
+                    // probability: predictionData.probability
+                };
+
+                // send request to save prediction in database
+                const saveRes = await fetch(`${API_BASE}/api/predictions`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`
+                    },
+                    body: JSON.stringify(savePayload)
+                });
+
+                // convert save response to JSON
+                const saveData = await saveRes.json();
+
+                // if save request failed
+                if (!saveRes.ok) {
+                    throw new Error(saveData.message || `HTTP ${saveRes.status}`);
+                }
+
+                // show popup message based on returned prediction level
+                if (!predictionData.is_predicted) {
+                    openMessagePopup(
+                        "لا يوجد توقع لحدوث حريق",
+                        `اسم المنطقة: ${areaName}`
+                    );
+                } else if (predictionData.risk_level === "high") {
+                    openMessagePopup(
+                        "خطر حريق مرتفع",
+                        `اسم المنطقة: ${areaName}`
+                    );
+                } else if (predictionData.risk_level === "medium") {
+                    openMessagePopup(
+                        "خطر حريق متوسط",
+                        `اسم المنطقة: ${areaName}`
+                    );
+                } else {
+                    openMessagePopup(
+                        "خطر حريق منخفض",
+                        `اسم المنطقة: ${areaName}`
+                    );
+                }
+
+                // reload predictions from backend after saving new prediction
                 loadPredictionsFromBackend();
 
             } catch (error) {
+                // print error in console and show popup error message
                 console.error(error);
-                alert("حدث خطأ أثناء حفظ التنبؤ");
+                openMessagePopup("خطأ", error.message || "حدث خطأ أثناء تنفيذ التنبؤ");
             }
-    }
+        }
+
+        // open the message popup and fill it with title and message text
+        function openMessagePopup(title, message) {
+            document.getElementById('messagePopupTitle').textContent = title;
+            document.getElementById('messagePopupText').textContent = message;
+            document.getElementById('messagePopupOverlay').classList.add('active');
+        }
+
+        // close the message popup
+        function closeMessagePopup() {
+            document.getElementById('messagePopupOverlay').classList.remove('active');
+        }
+
+        // close the message popup only when clicking on the background
+        function closeMessagePopupOnOverlay(event) {
+            if (event.target.id === 'messagePopupOverlay') {
+                closeMessagePopup();
+            }
+        }
+
         // make functions accessible from HTML onclick
         window.openPopup = openPopup;
         window.closePopup = closePopup;
         window.closePopupOnOverlay = closePopupOnOverlay;
         window.definePrediction = definePrediction;
+        window.closeMessagePopup = closeMessagePopup;
+        window.closeMessagePopupOnOverlay = closeMessagePopupOnOverlay;
     </script>
 </body>
 </html>

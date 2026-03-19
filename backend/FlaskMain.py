@@ -13,6 +13,7 @@ from Singleton.gee_connection import GEEConnection #import GEEConnection calss f
 from FireSpreadEstimator import fire_spread_bluePrint #import fire_spread_bluePrint from FireSpreadEstimator file
 from FireThreatEstimator import fire_threat_bp 
 from FireDetection import fire_detection_bp
+from FirePrediction import fire_prediction_bp
 from auth import auth_bp
 
 GEEConnection.get_instance() # initalize google earth engine connection once turning on the server, so whenever connection needed after that it will be returned
@@ -48,6 +49,7 @@ app.register_blueprint(test_gee_bp)
 app.register_blueprint(predictions_bp)
 app.register_blueprint(detections_bp)
 app.register_blueprint(fire_detection_bp)
+app.register_blueprint(fire_prediction_bp)
 
 app.register_blueprint(auth_bp)
 
