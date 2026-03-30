@@ -321,8 +321,8 @@
             // fallback for any unknown status
             return {
                 badgeClass: "status-safe",
-                badgeText: "غير محدد",
-                markerColor: "#999999"
+                badgeText: pred.fire === false ? "غير متنبأ بحدوث حريق" : "خطر غير معروف",
+                markerColor: pred.fire === false ? "#58AF63" : "#999999"
             }
 
         }
