@@ -513,6 +513,7 @@
     let map = null;
     let currentDetection = null;
     let currentDetails = null;
+    let burnedAreaLayer = null; // This layer will hold the burned-area polygon on the map
 
     // ===== Default weights =====
     const DEFAULT_W = { fire: 0.40, spread: 0.30, exposure: 0.30 };
@@ -551,14 +552,19 @@
             map.remove();
         }
 
-        const hasCoords = lat != null && lng != null && !isNaN(Number(lat)) && !isNaN(Number(lng));
+        const hasCoords =
+            lat != null &&
+            lng != null &&
+            !isNaN(Number(lat)) &&
+            !isNaN(Number(lng));
 
         map = L.map("map").setView(
             hasCoords ? [Number(lat), Number(lng)] : [24.7136, 46.6753],
             hasCoords ? 8 : 5
         );
 
-        L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png", {
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxZoom: 19
         }).addTo(map);
 
@@ -576,8 +582,9 @@
                 iconSize: [20, 20]
             });
 
-            const marker = L.marker([Number(lat), Number(lng)], { icon: fireIcon }).addTo(map);
-            marker.bindPopup(`
+            fireMarker = L.marker([Number(lat), Number(lng)], { icon: fireIcon }).addTo(map);
+
+            fireMarker.bindPopup(`
                 <div style="text-align: center; font-family: 'IBM Plex Sans Arabic', sans-serif; direction: rtl;">
                     <strong style="font-size: 16px;">حريق مرصود</strong><br>
                     <span style="font-size: 14px;">${regionName || "موقع الحريق"}</span>
@@ -586,6 +593,55 @@
         }
 
         setTimeout(() => map.invalidateSize(), 100);
+    }
+
+    let fireMarker = null; // store the fire marker so we can keep it above the polygon
+
+    function hasRenderableBurnedGeometry(geojson) {
+        // Check that the backend returned a real polygon geometry before drawing it 
+        if (!geojson || typeof geojson !== "object") return false;
+        // Accept only Polygon or MultiPolygon with valid coordinates
+        if (geojson.type === "Polygon" || geojson.type === "MultiPolygon") {
+            return Array.isArray(geojson.coordinates) && geojson.coordinates.length > 0;
+        }
+
+        return false;
+    }
+
+    function drawBurnedAreaPolygon(geojson) {
+        // Stop if the map is not ready or the returned geometry is invalid
+        if (!map || !hasRenderableBurnedGeometry(geojson)) return;
+
+        if (burnedAreaLayer) { // Remove the old burned-area polygon before drawing the new one
+            map.removeLayer(burnedAreaLayer);
+            burnedAreaLayer = null;
+        }
+
+        // Draw the estimated burned area on the map
+        burnedAreaLayer = L.geoJSON(geojson, {
+            style: {
+                color: "#E43411",
+                weight: 2,
+                fillColor: "#FB7047",
+                fillOpacity: 0.25
+            }
+        }).addTo(map);
+        // Keep the polygon behind the fire marker so the marker remains clear
+        try {
+            burnedAreaLayer.bringToBack();
+        } catch (e) {}
+
+        if (fireMarker) {
+            try {
+                fireMarker.bringToFront();
+            } catch (e) {}
+        }
+        // Zoom the map to the burned-area shape for better visualization
+        try {
+            map.fitBounds(burnedAreaLayer.getBounds(), { padding: [20, 20] });
+        } catch (e) {
+            console.warn("Could not fit burned area bounds:", e);
+        }
     }
 
     async function fetchDetectionById(targetFireId) {
@@ -662,6 +718,7 @@
 
         await loadSpreadDirection(); // call spread direction function
         await loadFireThreat();
+        await loadBurnedArea(); // Load or calculate the estimated active fire area
     }
 
     // -------------------- spread direction --------------------------
@@ -766,6 +823,94 @@
         } catch (err) {
             console.error(err);
             setText("threatLevel", "خطأ في الحساب");
+        }
+    }
+
+    // -------------------- Fire Area --------------------------
+    async function loadBurnedArea() {
+        // If both the burned area value and its polygon are already saved, use them directly without recalculating
+        if (
+            currentDetails?.Burned_Area != null &&
+            currentDetails?.Burned_Area_GeoJSON
+        ) {
+            setText("burnedArea", Number(currentDetails.Burned_Area).toFixed(2));
+            drawBurnedAreaPolygon(currentDetails.Burned_Area_GeoJSON);
+            return;
+        }
+
+        // If only the numeric value is saved, show it immediately
+        if (currentDetails?.Burned_Area != null) {
+            setText("burnedArea", Number(currentDetails.Burned_Area).toFixed(2));
+        } else {
+            setText("burnedArea", "...");
+        }
+
+        // Stop if the fire coordinates are missing
+        if (
+            currentDetection?.Latitude == null ||
+            currentDetection?.Longitude == null
+        ) {
+            if (currentDetails?.Burned_Area == null) {
+                setText("burnedArea", "-");
+            }
+            return;
+        }
+
+        try {
+            const token = await getAuthToken(true);
+            // Ask the backend to estimate the burned area using the saved fire point and time
+            const res = await fetch(`${API_BASE}/fire-burned-area`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    lat: currentDetection.Latitude,
+                    lon: currentDetection.Longitude,
+                    datetime: currentDetection.Detected_At
+                })
+            });
+
+            const data = await res.json();
+            console.log("burned area response:", data);
+            
+            if (!res.ok || !data.ok) { // Stop if the backend returned an error
+                throw new Error(data.error || "Failed to estimate burned area");
+            }
+
+            // Save both numeric value and polygon in FireDetails, so they can be reused later without recalculating
+            if (data.burned_area_km2 != null) {
+                await saveFireDetails({
+                    Burned_Area: data.burned_area_km2,
+                    Burned_Area_GeoJSON: data.burned_area_geojson
+                }); 
+
+                currentDetails = { // Update the local details object after saving
+                    ...(currentDetails || {}),
+                    Burned_Area: data.burned_area_km2,
+                    Burned_Area_GeoJSON: data.burned_area_geojson
+                };
+                setText("burnedArea", Number(data.burned_area_km2).toFixed(2)); // Show the final burned-area value in the card
+            
+                // Draw the returned burned-area shape if the geometry is valid
+                if (hasRenderableBurnedGeometry(data.burned_area_geojson)) {
+                    drawBurnedAreaPolygon(data.burned_area_geojson);
+                } else {
+                    console.warn("No valid burned_area_geojson returned from backend.");
+                }
+            }
+            // If the backend returned no numeric value, show a dash
+            if (data.burned_area_km2 == null) {
+                setText("burnedArea", "-");
+            }
+            
+        } catch (err) {
+            console.error("Burned area error:", err);
+            // Show an error only if there is no saved burned-area value to display
+            if (currentDetails?.Burned_Area == null) {
+                setText("burnedArea", "خطأ في الحساب");
+            }
         }
     }
 

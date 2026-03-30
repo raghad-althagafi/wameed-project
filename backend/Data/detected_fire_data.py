@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timezone # import class datetime
 from Singleton.firebase_connection import FirebaseConnection  # import firebase connection class
 from auth_utils import login_required
+import json
 
 DETECTED_COLLECTION = "DETECTED_FIRE" # name of collection
 
@@ -9,7 +10,6 @@ DETAILS_SUBCOLLECTION = "FIRE_DETAILS" # Subcollection name for fire details
 
 # Blueprint for detections
 detections_bp = Blueprint("detections_bp", __name__, url_prefix="/api/detections")
-
 
 # ---------- HELPER FUNCTIONS ---------- 
 
@@ -98,6 +98,11 @@ def _serialize_details(doc_snapshot):
         "Severity": data.get("Severity"),
         "Spread_Direction": data.get("Spread_Direction"),
         "Burned_Area": data.get("Burned_Area"),
+        "Burned_Area_GeoJSON": (
+            json.loads(data.get("Burned_Area_GeoJSON"))
+            if data.get("Burned_Area_GeoJSON")
+            else None
+        ),
     }
 
 def _serialize_detection(doc_snapshot):
@@ -241,7 +246,8 @@ def api_create_detection():
             "Humidity": humidity,
             "Severity": severity,
             "Spread_Direction": spread_direction,
-            "Burned_Area": burned_area
+            "Burned_Area": burned_area,
+            "Burned_Area_GeoJSON": json.dumps(payload.get("burned_area_geojson")) if payload.get("burned_area_geojson") is not None else None
         })
 
         saved_details = details_ref.get().to_dict() or {}
@@ -310,6 +316,19 @@ def api_update_detection_details(fire_id):
             payload.get("Burned_Area", payload.get("burned_area"))
         )
 
+    if "burned_area_geojson" in payload or "Burned_Area_GeoJSON" in payload:
+        geojson_value = payload.get(
+            "Burned_Area_GeoJSON",
+            payload.get("burned_area_geojson")
+        )
+
+        # Store GeoJSON as a JSON string because Firestore rejects deeply nested arrays
+        update_data["Burned_Area_GeoJSON"] = (
+            json.dumps(geojson_value)
+            if geojson_value is not None
+            else None
+        )
+
     if not update_data:
         return jsonify({
             "ok": False,
@@ -327,7 +346,8 @@ def api_update_detection_details(fire_id):
             "Humidity": None,
             "Severity": None,
             "Spread_Direction": None,
-            "Burned_Area": None
+            "Burned_Area": None,
+            "Burned_Area_GeoJSON": None
         })
 
     details_ref.set(update_data, merge=True)

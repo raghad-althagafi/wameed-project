@@ -12,6 +12,7 @@ from test_gee import test_gee_bp
 from Singleton.gee_connection import GEEConnection #import GEEConnection calss from gee_connection file
 from FireSpreadEstimator import fire_spread_bluePrint #import fire_spread_bluePrint from FireSpreadEstimator file
 from FireThreatEstimator import fire_threat_bp 
+from FireAreaEstimator import fire_area_bp # import active fire area Blueprint
 from FireDetection import fire_detection_bp
 from FirePrediction import fire_prediction_bp
 from auth import auth_bp
@@ -39,11 +40,12 @@ CORS(
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     supports_credentials=True
 )
-GEEConnection.get_instance() # initalize google earth engine connection once turning on the server, so whenever connection needed after that it will be returned
+# GEEConnection.get_instance() # initalize google earth engine connection once turning on the server, so whenever connection needed after that it will be returned
 
 #register BluePrints
 app.register_blueprint(fire_spread_bluePrint)
 app.register_blueprint(fire_threat_bp)
+app.register_blueprint(fire_area_bp)
 app.register_blueprint(test_gee_bp)
 
 app.register_blueprint(predictions_bp)
