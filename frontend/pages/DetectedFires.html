@@ -194,6 +194,15 @@
             margin-top: 8px;
         }
 
+        .cancel-button {
+            background-color: #878787; /* رمادي */
+            color: #ffffff;
+        }
+
+        .cancel-button:hover {
+            background-color: #6f6f6f; /* أغمق شوي بنفس النغمة */
+        }
+
     </style>
 </head>
 <body>
@@ -238,8 +247,8 @@
                 <div id="popupMap"></div>
             </div>
             <div class="popup-buttons">
-                <button class="main-button" onclick="closePopup()">إلغاء</button>
                 <button class="main-button" onclick="definePrediction()">تحديد</button>
+                <button class="main-button cancel-button" onclick="closePopup()">إلغاء</button>
             </div>
         </div>
     </div>
@@ -277,11 +286,11 @@
         // -----------------------------
         const TEST_MODE = false; 
 
-        // const TEST_POINT = {
-        //     lat: 18.186392926999712,
-        //     lng: 42.75531594766863,
-        //     datetime: "2023-09-30T01:50:00"
-        // };
+         //const TEST_POINT = {
+         //   lat: 20.1127,
+         //   lng: 42.3348,
+         //   datetime: "2023-05-27T10:05:00"
+         //};
         // -----------------------------------------------------------------------------
         
         const map = L.map('map').setView([24.7136, 46.6753], 5); 

@@ -202,6 +202,15 @@
         .status-high {
             background-color: #E43411;
         }
+
+        .cancel-button {
+            background-color: #878787; /* رمادي */
+            color: #ffffff;
+        }
+
+        .cancel-button:hover {
+            background-color: #6f6f6f; /* أغمق شوي بنفس النغمة */
+        }
     </style>
 </head>
 <body>
@@ -247,8 +256,8 @@
                 <div id="popupMap"></div>
             </div>
             <div class="popup-buttons">
-                <button class="main-button" onclick="closePopup()">إلغاء</button>
                 <button class="main-button" onclick="definePrediction()">تحديد</button>
+                <button class="main-button cancel-button" onclick="closePopup()">إلغاء</button>
             </div>
         </div>
     </div>
