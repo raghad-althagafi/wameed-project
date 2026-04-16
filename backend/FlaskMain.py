@@ -8,7 +8,6 @@ from Data.detected_fire_data import detections_bp
 # from routes.pages import pages_bp
 # ----------------- PAGES ROUTES ------------------
 
-from test_gee import test_gee_bp
 from Singleton.gee_connection import GEEConnection #import GEEConnection calss from gee_connection file
 from FireSpreadEstimator import fire_spread_bluePrint #import fire_spread_bluePrint from FireSpreadEstimator file
 from FireThreatEstimator import fire_threat_bp 
@@ -46,7 +45,6 @@ CORS(
 app.register_blueprint(fire_spread_bluePrint)
 app.register_blueprint(fire_threat_bp)
 app.register_blueprint(fire_area_bp)
-app.register_blueprint(test_gee_bp)
 
 app.register_blueprint(predictions_bp)
 app.register_blueprint(detections_bp)
