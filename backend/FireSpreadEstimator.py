@@ -16,12 +16,18 @@ def _dir8_ar(angle_deg): # the function take the degree as input and convert the
 @login_required
 def spread_direction():
 
-     # read data from frontend
     data = request.get_json(silent=True) or {}
 
-    lat = float(data.get("lat")) # take lat from json and convert it to float
-    lon = float(data.get("lon")) # take lon from json and convert it to float
+    lat = data.get("lat") # take lat from json
+    lon = data.get("lon") # take lon from json
     when_iso = data.get("datetime") # take datetime from json
+
+    # if datetime, lat, lon missing it will return error message
+    if lat is None or lon is None or not when_iso:
+        return jsonify({"error": "Missing lat/lon/datetime"}), 400
+
+    lat = float(lat) # convert lat to float after checking
+    lon = float(lon) # convert lon to float after checking
 
     # print data to make sure
     print("SPREAD INPUT:", {
@@ -29,10 +35,6 @@ def spread_direction():
         "lon": lon,
         "datetime": when_iso
     })
-
-    # if datetimelat, lon missing it will return error message
-    if lat is None or lon is None or not when_iso:
-        return jsonify({"error": "Missing lat/lon/datetime"}), 400
 
     # ------------- Convert user point into 1 km * 1 km region ----------------
     point = ee.Geometry.Point([lon, lat]) # the point the user selects
