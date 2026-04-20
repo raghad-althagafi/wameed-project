@@ -307,6 +307,13 @@ def weather_at_when_era5(era_ic, aoi, when):
 
     return out
 
+def compute_threat_score(fire_power, spread_index, exposure, w_fire, w_spread, w_exposure):
+    return (
+        ee.Number(fire_power).multiply(w_fire)
+        .add(ee.Number(spread_index).multiply(w_spread))
+        .add(ee.Number(exposure).multiply(w_exposure))
+        .clamp(0, 1)
+    )
 
 # Core compute
 def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_spread: float, w_exposure: float):
@@ -471,12 +478,10 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
     pop_mean = safe_number(pop_mean, 0)
     exposure = normalize(pop_mean, POP_MAX)
 
-    # ---- Threat Score
-    threat_score = (
-        fire_power.multiply(w_fire)
-        .add(spread_index.multiply(w_spread))
-        .add(exposure.multiply(w_exposure))
-        .clamp(0, 1)
+    # Threat Score
+    threat_score = compute_threat_score(
+    fire_power, spread_index, exposure,
+    w_fire, w_spread, w_exposure
     )
 
     threat_level = ee.Algorithms.If(
@@ -484,7 +489,7 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
         ee.Algorithms.If(threat_score.lt(0.66), "متوسطة", "عالية")
     )
 
-    # ---- Output (JSON-ready)
+    # Output (JSON-ready)
     result = {
         "threat_score": threat_score.getInfo(),
         "threat_level": threat_level.getInfo(),
@@ -493,9 +498,7 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
     return result
 
 
-# ======================
-# Route يربطه بالفرونت
-# ======================
+# Route
 @fire_threat_bp.route("/fire-threat", methods=["POST"])
 @login_required
 def fire_threat_route():
