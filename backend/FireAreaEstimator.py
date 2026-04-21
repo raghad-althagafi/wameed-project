@@ -18,7 +18,7 @@ SEARCH_RADIUS_M = 5000 # search within 5 km around the selected point
 WINDOW_HOURS = 48 # look back 48 hours from the selected time
 CONFIDENCE_MIN = 1 # keep nominal and high confidence pixels only
 PIXEL_SCALE_M = 375 # VIIRS NRT pixel size 
-AGGREGATION_DISTANCE_M = 1125 # connect nearby hotspots into one fire cluster
+AGGREGATION_DISTANCE_M = 750 # connect nearby hotspots into one fire cluster
 
 ALL_LABELS = [p["label"] for p in NRT_PRODUCTS] # List of all datasets used in the response
 
