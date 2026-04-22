@@ -41,7 +41,7 @@ BASE_DIR = Path(__file__).resolve().parent
 MODEL_DIR = BASE_DIR / "Model"
 
 # path for saved model files
-MODEL_PATH = MODEL_DIR / "rf_model.pkl"
+MODEL_PATH = MODEL_DIR / "gb_model.pkl"
 PREPROCESSOR_PATH = MODEL_DIR / "preprocessor.pkl"
 THRESHOLD_PATH = MODEL_DIR / "threshold.pkl"
 
@@ -114,11 +114,7 @@ def _get_terrain_features(point_geom):
 
 def _get_lulc_class(point_geom):
     # load MODIS land cover and sort from newest to oldest
-    lc_col = (
-        ee.ImageCollection("MODIS/061/MCD12Q1")
-        .select("LC_Type1")
-        .sort("system:time_start", False)
-    )
+    lc_col = (ee.ImageCollection("MODIS/061/MCD12Q1").select("LC_Type1").sort("system:time_start", False))
 
     # take most recent image if available, otherwise use fallback image
     lulc_img = ee.Image(
@@ -222,9 +218,6 @@ def _get_ndwi_mean(point_geom, end_dt):
 
     return round(float(ndwi_value or -9999), 3)
 
-
-import requests
-from datetime import timedelta
 
 def _get_weather_features(lat, lon, when_iso):
     when_dt = _coerce_utc_datetime(when_iso)

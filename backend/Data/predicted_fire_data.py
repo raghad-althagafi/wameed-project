@@ -208,8 +208,7 @@ def get_user_predictions(user_id: str):
     # query predictions collection by user ID
     docs = (
         db.collection(PREDICTED_COLLECTION)
-          .where("User_ID", "==", user_id)
-          .stream()
+          .where("User_ID", "==", user_id).stream()
     )
 
     results = []
