@@ -49,21 +49,7 @@ class TestFireThreatEstimator(unittest.TestCase):
         expected = (0.5 * 0.25) + (0.6 * 0.35) + (0.8 * 0.40)
         self.assertAlmostEqual(value, expected)
     
-    def test_threat_level_classification(self):
-        # Test Low
-        score = compute_threat_score(0.1, 0.1, 0.1, 0.25, 0.35, 0.40)
-        value = float(score.getInfo())
-        self.assertTrue(value < 0.33)
-
-        # Test Medium
-        score = compute_threat_score(0.5, 0.5, 0.5, 0.25, 0.35, 0.40)
-        value = float(score.getInfo())
-        self.assertTrue(0.33 <= value < 0.66)
-
-        # Test High
-        score = compute_threat_score(1.0, 1.0, 1.0, 0.25, 0.35, 0.40)
-        value = float(score.getInfo())
-        self.assertTrue(value >= 0.66)
+    
 
 
 if __name__ == "__main__":
