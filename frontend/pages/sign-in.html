@@ -358,7 +358,7 @@
         // function to show the popup with a custom title and message
         function showSigninPopup(title, message, onClose = null) {
             // set the title and messaage
-            signinPopupTitle.textContent = title;a
+            signinPopupTitle.textContent = title;
             signinPopupMessage.textContent = message;
             signinPopup.classList.add('show'); // show the popup
 
@@ -435,7 +435,7 @@
 
             //get the entered email and password
             const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('password').value.trim();
+            const password = document.getElementById('password').value;
 
             try {
                 // sign in with email and password
