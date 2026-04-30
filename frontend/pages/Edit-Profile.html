@@ -58,7 +58,7 @@
             font-size: 20px;
             font-weight: 700;
             width: 140px;
-            text-align: left;
+            text-align: right;
             color: black;
             margin: 0;
         }
@@ -293,11 +293,31 @@
             customPopupBtn.addEventListener("click", closeHandler);
         }
 
+        // Check whether the new password follows the same rules used in sign up
+        function validateNewPassword(password) {
+            const hasUpperLower = /[A-Z]/.test(password) && /[a-z]/.test(password); // Password must contain uppercase and lowercase letters
+            const hasSpecial = /[^A-Za-z0-9]/.test(password); // Password must contain a special character
+            const hasNumber = /[0-9]/.test(password); // Password must contain a number
+            const hasLength = password.length >= 8; // Password must be at least 8 characters long
+            if (!hasUpperLower) {
+                return "يجب أن تحتوي كلمة المرور على حروف كبيرة وصغيرة.";
+            }
+            if (!hasSpecial) {
+                return "يجب أن تحتوي كلمة المرور على رمز خاص.";
+            }
+            if (!hasNumber) {
+                return "يجب أن تحتوي كلمة المرور على رقم.";
+            }
+            if (!hasLength) {
+                return "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل.";
+            }
+            return "";
+        }
+
         // load current user data from backend
         async function loadCurrentProfile() {
             try {
                 const user = auth.currentUser;
-
                 // if no user is logged in, redirect to sign in
                 if (!user) {
                     window.location.href = "sign-in.html";
@@ -333,6 +353,10 @@
                 document.getElementById("nameInput").value = data.user.User_name || "";
                 document.getElementById("emailInput").value = data.user.User_email || "";
                 
+                // clear password fields in case browser autofills them
+                document.getElementById("currentPasswordInput").value = "";
+                document.getElementById("newPasswordInput").value = "";
+                document.getElementById("confirmPasswordInput").value = "";
             } catch (error) {
                 console.error("Load edit profile error:", error);
                 showPopup("خطأ", "حدث خطأ أثناء تحميل البيانات");
@@ -386,7 +410,6 @@
         // save edited profile data
         async function saveData(event) {
             event.preventDefault();
-
             const user = auth.currentUser;
             // Redirect if user is not logged in
             if (!user) {
@@ -401,11 +424,11 @@
             const newPassword = document.getElementById("newPasswordInput").value;
             const confirmPassword = document.getElementById("confirmPasswordInput").value;
 
-            if (!name) {
+            if (!name) { // Make sure the name field is not empty
                 showPopup("خطأ", "الاسم مطلوب.");
                 return;
             }
-            if (!email) {
+            if (!email) { // Make sure the email field is not empty
                 showPopup("خطأ", "البريد الإلكتروني مطلوب.");
                 return;
             }
@@ -414,6 +437,22 @@
             const emailChanged = email !== (user.email || "");
             const passwordChanged = newPassword.trim() !== "" || confirmPassword.trim() !== "";
 
+            // Prevent changing email and password in the same request because email update needs verification and logout first
+            if (emailChanged && passwordChanged) {
+                showPopup(
+                    "تنبيه",
+                    "لا يمكن تعديل البريد الإلكتروني وكلمة المرور معًا. يرجى تعديل البريد الإلكتروني أولًا، ثم تسجيل الدخول مرة أخرى لتعديل كلمة المرور."
+                );
+                return;
+            }
+            // Validate new password rules only when user wants to change password
+            if (passwordChanged) {
+                const passwordValidationMessage = validateNewPassword(newPassword);
+                if (passwordValidationMessage) {
+                    showPopup("خطأ", passwordValidationMessage);
+                    return;
+                }
+            }
             // Prevent password update if the two new password fields do not match
             if (passwordChanged && newPassword.trim() !== confirmPassword.trim()) {
                 showPopup("خطأ", "كلمتا المرور الجديدتان غير متطابقتين.");
@@ -429,20 +468,14 @@
                 showPopup("خطأ", "أدخلي كلمة المرور الحالية لتعديل البريد الإلكتروني أو كلمة المرور.");
                 return;
             }
-            // If current password is entered without changing email or password, show warning
-            if (currentPassword && !emailChanged && !passwordChanged) {
-                showPopup("تنبيه", "كلمة المرور الحالية تُستخدم فقط عند تعديل البريد الإلكتروني أو كلمة المرور.");
-                return;
-            }
+            
             // Track whether Firebase was updated before backend update
             let firebaseUpdated = false;
-
             try {
                 // re-authenticate before sensitive updates
                 if (emailChanged || passwordChanged) {
                     await reauthenticateUser(currentPassword);
                 }
-
                 // if email is changed, Firebase requires verification first
                 if (emailChanged) {
                     await verifyBeforeUpdateEmail(user, email);
@@ -459,7 +492,6 @@
                     );
                     return;
                 }
-
                 // update password in Firebase Auth
                 if (passwordChanged) {
                     await updatePassword(user, newPassword);
@@ -467,33 +499,31 @@
                 }
                 // update Firestore profile
                 await updateBackendProfile(name, user.email || email);
-
                 showPopup("تم بنجاح", "تم حفظ التعديلات بنجاح.", () => {
                     window.location.href = "Profile.html";
                 });
 
-            } catch (error) {
-                console.error("Save profile error:", error);
-
+            } catch (error) { // Handle errors that happen while saving profile changes
+                console.error("Save profile error:", error); 
                 const code = error.code || "";
                 const msg = error.message || "";
 
-                if (code === "auth/invalid-credential") {
+                if (code === "auth/invalid-credential") { // Show a clear message if the current password is wrong
                     showPopup("خطأ", "كلمة المرور الحالية غير صحيحة.");
-                } else if (code === "auth/email-already-in-use") {
+                } else if (code === "auth/email-already-in-use") { // Show a message if the new email is already used by another account
                     showPopup("خطأ", "هذا البريد الإلكتروني مستخدم مسبقًا.");
-                } else if (code === "auth/invalid-email") {
+                } else if (code === "auth/invalid-email") { // Show a message if the new email format is invalid
                     showPopup("خطأ", "البريد الإلكتروني الجديد غير صالح.");
-                } else if (code === "auth/weak-password") {
+                } else if (code === "auth/weak-password") { // Show a message if the new password is too weak
                     showPopup("خطأ", "كلمة المرور الجديدة ضعيفة.");
-                } else if (code === "auth/requires-recent-login") {
+                } else if (code === "auth/requires-recent-login") { // Ask the user to sign in again if the session is too old
                     showPopup("خطأ", "انتهت الجلسة الحساسة. سجلي الدخول مرة أخرى ثم حاولي.");
-                } else if (firebaseUpdated) {
+                } else if (firebaseUpdated) { // Warn the user if Firebase was updated but backend update failed
                     showPopup(
                         "تنبيه",
                         "تم تحديث بعض البيانات في Firebase، لكن حدثت مشكلة أثناء مزامنة الملف الشخصي مع قاعدة البيانات."
                     );
-                } else {
+                } else { // Show a general error message for any unexpected problem
                     showPopup("خطأ", msg || "حدث خطأ أثناء حفظ التعديلات.");
                 }
             }
@@ -514,7 +544,6 @@
                     window.location.href = "sign-in.html";
                 }
             });
-
     </script>
 
 </body>

@@ -145,7 +145,21 @@
             /* Slight lift effect */
             box-shadow: 0 6px 16px rgba(236, 90, 47, 0.35);
         }
-
+        /* Keep date and time values in left-to-right order inside Arabic text */
+        .ltr-fix {
+            direction: ltr;
+            unicode-bidi: isolate;
+            display: inline-block;
+            margin-right: 4px;
+        }
+        /* Keep the Arabic date/time label together when generating the PDF */
+        .meta-label {
+            direction: rtl;
+            unicode-bidi: isolate;
+            display: inline-block;
+            white-space: nowrap;
+        }
+        
         /* Share Button Styles */
         .share-btn {
             background-color: #666;
@@ -375,21 +389,23 @@
         <section class="grid">
             <div class="card">
                 <div class="label">اسم المنطقة</div>
-                <!-- <div class="value" id="region">الرياض</div> -->
-                <!-- <div class="sub-text">تاريخ الرصد: <span id="date">2026-01-27</span></div>
-                <div class="sub-text">وقت الرصد: <span id="time">09:14</span></div> -->
                 <div class="value" id="region">-</div>
-                <div class="sub-text">تاريخ الرصد: <span id="date">-</span></div>
-                <div class="sub-text">وقت الرصد: <span id="time">-</span></div>
+                <!-- Date and time labels use non-breaking spaces to prevent text order issues in the PDF -->
+                <div class="sub-text">
+                    <span class="meta-label">تاريخ&nbsp;الرصد:</span>
+                    <bdi id="date" class="ltr-fix">-</bdi>
+                </div>
+                <div class="sub-text">
+                    <span class="meta-label">وقت&nbsp;الرصد:</span>
+                    <bdi id="time" class="ltr-fix">-</bdi>
+                </div>
             </div>
             <div class="card">
                 <div class="label">درجة الحرارة</div>
-                <!-- <div class="value" dir="ltr"><span id="temp">25</span>° C</div> -->
                 <div class="value" dir="ltr"><span id="temp">-</span>° C</div>
             </div>
             <div class="card">
                 <div class="label">الرطوبة</div>
-                <!-- <div class="value" dir="ltr"><span id="hum">35</span> %</div> -->
                 <div class="value" dir="ltr"><span id="hum">-</span> %</div>
             </div>
         </section>
@@ -425,7 +441,7 @@
         <div class="map-section">
             <div id="map"></div>
             <div class="pdf-container">
-                <button class="pdf-btn" onclick="window.print()">
+                <button class="pdf-btn" onclick="downloadPDF()">
                     <span>⬇</span>
                     <span>PDF</span>
                 </button>
@@ -451,6 +467,8 @@
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <!-- Weights Modal -->
     <div id="weightsModal" class="modal-overlay" aria-hidden="true">
         <div class="modal">
@@ -1044,8 +1062,61 @@ Google Maps: ${googleMapsUrl}`;
         setText("threatLevel", "جاري الحساب...");
         await loadFireThreat();
     });
-
     updateSliderUI();
+
+    function downloadPDF() {
+        // Select the main details section that will be exported as PDF
+        const element = document.querySelector("main.container");
+        // Use the region name in the PDF file name
+        const regionName = document.getElementById("region")?.textContent.trim() || "تفاصيل الحريق";
+
+        const opt = {
+            margin: 6,
+            filename: `وميض - ${regionName}.pdf`,
+            image: { type: "jpeg", quality: 0.98 },
+            html2canvas: {
+                scale: 2,
+                useCORS: true,
+                scrollY: 0,
+                onclone: (doc) => {
+                    doc.querySelectorAll( // Remove elements that should not appear in the PDF
+                        "#navbar-container, .header-image, .map-section, .pdf-container, .weights-btn, .info-icon, .footer, .modal-overlay"
+                    ).forEach(el => el.remove());
+                    // Reset page height to prevent an extra blank PDF page
+                    doc.documentElement.style.height = "auto";
+                    doc.body.style.height = "auto";
+                    doc.body.style.minHeight = "0";
+                    doc.body.style.margin = "0";
+                    // Keep the exported content clean and fitted inside one page
+                    const container = doc.querySelector("main.container");
+                    if (container) {
+                        container.style.height = "auto";
+                        container.style.minHeight = "0";
+                        container.style.padding = "20px 40px";
+                        container.style.overflow = "hidden";
+                    }
+                }
+            },
+            jsPDF: {
+                unit: "mm",
+                format: "a4",
+                orientation: "portrait"
+            }
+        };
+        html2pdf()
+        .set(opt)
+        .from(element)
+        .toPdf()
+        .get("pdf")
+        .then((pdf) => {
+            const totalPages = pdf.internal.getNumberOfPages(); // Delete the last page if html2pdf creates an extra blank page
+            if (totalPages > 1) {
+                pdf.deletePage(totalPages);
+            }
+        })
+        .save();
+    }
+    window.downloadPDF = downloadPDF;
 
     auth.onAuthStateChanged(async (user) => {
         try {
