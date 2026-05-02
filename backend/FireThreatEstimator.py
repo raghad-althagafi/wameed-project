@@ -252,60 +252,6 @@ def fwi_from_isi_bui(isi, bui):
     fwi = ee.Image(ee.Algorithms.If(B.lte(1), fwi_case1, fwi_case2))
     return fwi.max(0)
 
-def weather_at_when_era5(era_ic, aoi, when):
-
-    # ---- 1) get closest HOURLY snapshot around WHEN (± 2 hours) ----
-    # If you want stricter: ±1 hour, if you want safer: ±3 hours
-    win_start = when.advance(-2, "hour")
-    win_end   = when.advance( 2, "hour")
-
-    # Grab candidates
-    candidates = (era_ic
-                .filterBounds(aoi)
-                .filterDate(win_start, win_end))
-
-    # If no image found, fallback to a constant "safe" image
-    fallback = ee.Image.constant([273.15, 273.15, 0, 0, 0]).rename([
-        "temperature_2m",
-        "dewpoint_temperature_2m",
-        "u_component_of_wind_10m",
-        "v_component_of_wind_10m",
-        "total_precipitation"
-    ])
-
-    # Choose closest by minimizing |system:time_start - when|
-    def add_time_diff(img):
-        diff = ee.Number(img.get("system:time_start")).subtract(when.millis()).abs()
-        return img.set("time_diff", diff)
-
-    closest = ee.Image(
-        ee.Algorithms.If(
-            candidates.size().gt(0),
-            candidates.map(add_time_diff).sort("time_diff").first(),
-            fallback
-        )
-    )
-
-    # ---- 2) build variables ----
-    T_k  = closest.select("temperature_2m")
-    Td_k = closest.select("dewpoint_temperature_2m")
-    RH   = rel_humidity_pct(T_k, Td_k)                     # uses your helper
-    W    = wind_speed_kmh(closest.select("u_component_of_wind_10m"),
-                        closest.select("v_component_of_wind_10m"))  # your helper
-
-    # ---- 3) precipitation: last 24 hours BEFORE WHEN (mm) ----
-    pr24 = (era_ic.select("total_precipitation")
-            .filterBounds(aoi)
-            .filterDate(when.advance(-24, "hour"), when)
-            .sum()
-            .multiply(1000))  # ERA5 total_precipitation is meters -> mm
-
-    out = (to_celsius(T_k).rename("T")
-        .addBands(RH.rename("RH"))
-        .addBands(W.rename("W"))
-        .addBands(pr24.rename("R")))
-
-    return out
 
 def compute_threat_score(fire_power, spread_index, exposure, w_fire, w_spread, w_exposure):
     return (
@@ -322,10 +268,6 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
     # ---------- Time setup ----------
     WHEN = ee.Date(when_iso)
 
-    # window (hours) for near-real-time fire sampling
-    START = WHEN.advance(-3, "hour")
-    END   = WHEN.advance( 3, "hour")
-
     # day window for FWI daily value
     DAY_START = ee.Date(WHEN.format("YYYY-MM-dd"))
     DAY_END   = DAY_START.advance(1, "day")
@@ -336,7 +278,13 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
         .filterDate(DAY_START, DAY_END)
     )
 
-    active_fire_img = ee.Image(active_fire_collection.first())
+    active_fire_img = ee.Image(
+    ee.Algorithms.If(
+        active_fire_collection.size().gt(0),
+        active_fire_collection.first(),
+        ee.Image.constant([0, 0]).rename(["FireMask", "MaxFRP"])
+    )
+)
 
     # fire mask (7,8,9 = active fire)
     fire_mask = active_fire_img.select("FireMask").gte(7)
@@ -502,7 +450,6 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
 @fire_threat_bp.route("/fire-threat", methods=["POST"])
 @login_required
 def fire_threat_route():
-    print(">>> fire-threat route HIT")
 
     data = request.get_json(silent=True) or {}
 
