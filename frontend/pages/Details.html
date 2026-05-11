@@ -789,7 +789,16 @@
             }
 
         } catch (err) { // in case of error
-            setText("spreadDir", "خطأ في الحساب");
+
+            // specific exception for fetch/network errors
+            if (err instanceof TypeError) {
+                setText("spreadDir", "فشل الاتصال بالخادم");
+            }
+
+            // generic fallback for unexpected errors
+            else {
+                setText("spreadDir", "خطأ في الحساب");
+            }
         }
 
     }

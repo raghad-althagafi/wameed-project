@@ -13,7 +13,7 @@ def _dir8_ar(angle_deg): # the function take the degree as input and convert the
     return dirs[int((_norm_deg(angle_deg) + 22.5) // 45) % 8]
 
 @fire_spread_bluePrint.route("/fire-spread-direction", methods=["POST"])
-@login_required
+@login_required # user should login
 def spread_direction():
 
     data = request.get_json(silent=True) or {}
