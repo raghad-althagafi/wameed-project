@@ -3,7 +3,7 @@ import ee
 import traceback
 from auth_utils import login_required
 
-fire_threat_bp = Blueprint("fire_threat", __name__)
+fire_threat_bp = Blueprint("fire_threat", __name__) #fire threat blue print
 
 BUFFER_M = 500  
 
@@ -17,7 +17,7 @@ W_FIRE = 0.25
 W_SPREAD = 0.35
 W_EXPOSURE = 0.40
 
-# -----Utils-------
+# -----Utility Functions-------
 def normalize(val, max_val):
     return ee.Number(val).divide(max_val).clamp(0, 1)
 
@@ -25,7 +25,7 @@ def normalize(val, max_val):
 def safe_number(val, default=0):
     return ee.Number(ee.Algorithms.If(val, val, default))
 
-def mean_in_aoi(img, aoi, scale, default=0):
+def mean_in_aoi(img, aoi, scale, default=0): #Calculate the mean
     val = img.reduceRegion(
         reducer=ee.Reducer.mean(),
         geometry=aoi,
@@ -36,7 +36,7 @@ def mean_in_aoi(img, aoi, scale, default=0):
 
 
 # Helpers: units + RH
-def to_celsius(k_img): # Convert temperature from Kelvin (ERA5 units) to Celsius
+def to_celsius(k_img): # Convert temperature from Kelvin to Celsius
     return ee.Image(k_img).subtract(273.15)
 
 # Compute wind speed (km/h) from ERA5 wind components u and v (m/s).
@@ -74,7 +74,7 @@ def ffmc_next(ffmc_prev, T_c, RH, W_kmh, R_mm):
     # Rain effect (only if rain > 0.5 mm)
     rf = ee.Image(R_mm).subtract(0.5).max(0)
 
-    # Moisture increase due to rainfall (standard FWI formula)
+    # Calculate moisture increase after rainfall (standard FWI formula)
     mr1 = mo.expression(
         "mo + 42.5*rf*exp(-100.0/(251.0-mo))*(1-exp(-6.93/rf))",
         {"mo": mo, "rf": rf}
@@ -111,9 +111,9 @@ def ffmc_next(ffmc_prev, T_c, RH, W_kmh, R_mm):
     kw = kw.multiply(0.581).multiply(T_c.expression("exp(0.0365*T)", {"T": T_c}))
 
     # Update moisture m
-    m_dry = Ed.add(mr.subtract(Ed).multiply(ko.multiply(-1).exp()))
-    m_wet = Ew.subtract(Ew.subtract(mr).multiply(kw.multiply(-1).exp()))
-    m_mid = mr
+    m_dry = Ed.add(mr.subtract(Ed).multiply(ko.multiply(-1).exp())) # Moisture after drying
+    m_wet = Ew.subtract(Ew.subtract(mr).multiply(kw.multiply(-1).exp())) # Moisture after wetting
+    m_mid = mr # Keep moisture unchanged
 
     m = ee.Image(
         ee.Algorithms.If(
@@ -127,49 +127,72 @@ def ffmc_next(ffmc_prev, T_c, RH, W_kmh, R_mm):
 
 def isi_from_ffmc_wind(ffmc, W_kmh):
     ffmc = ee.Image(ffmc).clamp(0, 101)
-
+    # moisture content
     m = ffmc.expression("147.2*(101.0-FFMC)/(59.5+FFMC)", {"FFMC": ffmc})
-
+    # Calculate wind effect
     fW = ee.Image(W_kmh).expression("exp(0.05039*W)", {"W": W_kmh})
+    # Calculate fuel moisture effect 
     fF = m.expression("91.9*exp(-0.1386*m)*(1 + (m**5.31)/(4.93e7))", {"m": m})
 
     isi = fW.multiply(fF).multiply(0.208)
     return isi.max(0)
 
-# ----------------------
-# DMC / DC / BUI / FWI (SAFE EE ops)
-# ----------------------
-def dmc_next(dmc_prev, T_c, RH, R_mm, month_num):
+# Calculate daylight hours based on latitude and date
+def daylight_hours(lat, date):
+    # Convert latitude from degrees to radians
+    lat_rad = ee.Number(lat).multiply(3.14159265359).divide(180)
+    # Get day of year
+    day = ee.Date(date).getRelative("day", "year").add(1)
+    # Approximate solar declination angle
+    decl = ee.Number(23.44).multiply(3.14159265359).divide(180).multiply(
+        ee.Number(360)
+        .multiply(day.add(284))
+        .divide(365)
+        .multiply(3.14159265359)
+        .divide(180)
+        .sin()
+    )
+    # Calculate sunset hour angle
+    x = lat_rad.tan().multiply(decl.tan()).multiply(-1).clamp(-1, 1)
+    sunset_angle = x.acos()
+    # Convert angle to daylight hours
+    day_length = sunset_angle.multiply(24).divide(3.14159265359)
+    return day_length
+
+# DMC / DC / BUI / FWI
+def dmc_next(dmc_prev, T_c, RH, R_mm, lat, date):
+    # Convert previous DMC and weather inputs to Earth Engine images
     P0 = ee.Image(dmc_prev)
     T  = ee.Image(T_c)
     H  = ee.Image(RH)
     R  = ee.Image(R_mm)
 
-   
+    # Prevent temperature from going below -1.1 to keep the DMC equation valid
     T = T.max(-1.1)
-
-
-    EL = ee.List([6.5, 7.5, 9.0, 12.8, 13.9, 13.9, 12.4, 10.9, 9.4, 8.0, 7.0, 6.0])
-    Le = ee.Number(EL.get(ee.Number(month_num).subtract(1)))  # month_num is 1..12
+    # Calculate daylight hours based on latitude and date
+    Le = daylight_hours(lat, date)
     Le_img = ee.Image.constant(Le)
 
-    # K = 1.894 (T + 1.1) (100 - H) Le * 10^-6
+    # Calculate the daily drying rate based on temperature, humidity, and month
     K = ee.Image.constant(1.894).multiply(T.add(1.1)).multiply(ee.Image.constant(100).subtract(H)).multiply(Le_img).multiply(1e-6)
 
-    # --- Rain routine only if r0 > 1.5 mm
+    # Check if rainfall is high enough to affect DMC
     rain_event = R.gt(1.5)
 
-    #  re = 0.92 r0 - 1.27
+    # Calculate effective rainfall
     re = R.multiply(0.92).subtract(1.27).max(0)
 
-    #  Mo = 20 + exp(5.6348 - P0/43.43)
+    # Convert previous DMC to moisture content
     Mo = P0.expression("20 + exp(5.6348 - P/43.43)", {"P": P0})
 
-    #  b piecewise based on P0
-    b_13a = P0.expression("100/(0.5 + 0.3*P)", {"P": P0})               # P0 <= 33
-    b_13b = P0.expression("14 - 1.3*log(P)", {"P": P0})                # 33 < P0 <= 65
-    b_13c = P0.expression("6.2*log(P) - 17.2", {"P": P0})              # P0 > 65
+    # Calculate b value for low DMC conditions
+    b_13a = P0.expression("100/(0.5 + 0.3*P)", {"P": P0}) 
+    # Calculate b value for medium DMC conditions              
+    b_13b = P0.expression("14 - 1.3*log(P)", {"P": P0}) 
+    # Calculate b value for high DMC conditions               
+    b_13c = P0.expression("6.2*log(P) - 17.2", {"P": P0})              
 
+    # Select the correct b equation based on the previous DMC value
     b = ee.Image(
         ee.Algorithms.If(
             P0.lte(33), b_13a,
@@ -177,46 +200,53 @@ def dmc_next(dmc_prev, T_c, RH, R_mm, month_num):
         )
     )
 
-    #  Mr = Mo + 1000 re / (48.77 + b re)
+    # Calculate moisture content after rainfall
     Mr = Mo.add(re.multiply(1000).divide(ee.Image.constant(48.77).add(b.multiply(re))))
 
-    #  Pr = 244.72 - 43.43 ln(Mr - 20)
+    # Convert moisture content after rainfall back to DMC
     Pr = Mr.expression("244.72 - 43.43*log(Mr - 20)", {"Mr": Mr})
 
-    #  Pr cannot be < 0 => raise negatives to 0
+    # Prevent DMC after rainfall from becoming negative
     Pr = Pr.max(0)
 
-    #  P = (P0 or Pr) + 100K
+    # Use rainfall-adjusted DMC if rain is significant; otherwise use previous DMC
     P_base = ee.Image(ee.Algorithms.If(rain_event, Pr, P0))
+    # Add the daily drying effect to get the updated DMC
     P = P_base.add(K.multiply(100))
 
     return P.max(0)
 
 def dc_next(dc_prev, T, R):
+    # Convert previous dc and weather inputs to Earth Engine images
     dc_prev = ee.Image(dc_prev)
     T = ee.Image(T)
     R = ee.Image(R)
 
-    re = R.multiply(0.83).subtract(1.27).max(0)
+    re = R.multiply(0.83).subtract(1.27).max(0) # Calculate effective rainfall for DC
 
     
-    dc_rain = dc_prev.subtract(re.multiply(400).divide(re.add(800)))
-    dc_no_rain = dc_prev.add(T.multiply(0.05))
+    dc_rain = dc_prev.subtract(re.multiply(400).divide(re.add(800))) # Calculate DC after rainfall effect
+    dc_no_rain = dc_prev.add(T.multiply(0.05)) # Calculate DC when there is no significant rain
 
     return ee.Image(ee.Algorithms.If(R.gt(2.8), dc_rain, dc_no_rain)).max(0)
 
 def bui_from_dmc_dc(dmc, dc):
+    # Convert to an Earth Engine image
     dmc = ee.Image(dmc)
     dc = ee.Image(dc)
 
-    c04dc = dc.multiply(0.4)
-    c08dc = dc.multiply(0.8)
+    c04dc = dc.multiply(0.4) # Calculate 40% of DC, used as a threshold in the BUI formula
+    c08dc = dc.multiply(0.8) # Calculate 80% of DC, used in the BUI formula
 
+    # Calculate BUI when DMC is less than or equal to 40% of DC
     bui_case1 = dmc.multiply(c08dc).divide(dmc.add(c04dc))
 
+    # Calculate ratio used in the second BUI case
     ratio = c08dc.divide(dmc.add(c04dc))
+    # Calculate adjustment term for the second BUI case
     term = ee.Image.constant(1).subtract(ratio)
 
+    # Calculate BUI when DMC is greater than 40% of DC
     bui_case2 = dmc.subtract(
         term.multiply(
             ee.Image.constant(0.92).add(
@@ -224,31 +254,34 @@ def bui_from_dmc_dc(dmc, dc):
             )
         )
     )
-
+    # Select the correct BUI formula based on the relationship between DMC and DC
     bui = ee.Image(ee.Algorithms.If(dmc.lte(c04dc), bui_case1, bui_case2))
     return bui.max(0)
 
 def fwi_from_isi_bui(isi, bui):
+    # Convert to an Earth Engine image
     isi = ee.Image(isi)
     bui = ee.Image(bui)
-
+    # Calculate drying factor when BUI is less than or equal to 80
     fD_case1 = ee.Image.constant(0.626).multiply(bui.pow(0.809)).add(2)
-
+    # Calculate drying factor when BUI is greater than 80
     fD_case2 = ee.Image.constant(1000).divide(
         ee.Image.constant(25).add(
             ee.Image.constant(108.64).multiply(bui.multiply(-0.023).exp())
         )
     )
-
+    # Select the correct drying factor based on the BUI value
     fD = ee.Image(ee.Algorithms.If(bui.lte(80), fD_case1, fD_case2))
-
+    # Calculate the intermediate fire intensity value
     B = isi.multiply(fD).multiply(0.1)
-
+    # Use B directly when it is less than or equal to 1
     fwi_case1 = B
+    # Apply the final FWI transformation when B is greater than 1
     fwi_case2 = ee.Image.constant(2.72).multiply(
         ee.Image.constant(0.434).multiply(B.log()).pow(0.647)
     ).exp()
 
+    # Select the correct FWI formula based on the B value
     fwi = ee.Image(ee.Algorithms.If(B.lte(1), fwi_case1, fwi_case2))
     return fwi.max(0)
 
@@ -263,21 +296,21 @@ def compute_threat_score(fire_power, spread_index, exposure, w_fire, w_spread, w
 
 # Core compute
 def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_spread: float, w_exposure: float):
+    # Create the area of interest around the selected location
     AOI = ee.Geometry.Point([lon, lat]).buffer(BUFFER_M)
-
-    # ---------- Time setup ----------
+    # Time setup 
     WHEN = ee.Date(when_iso)
-
-    # day window for FWI daily value
     DAY_START = ee.Date(WHEN.format("YYYY-MM-dd"))
     DAY_END   = DAY_START.advance(1, "day")
 
+    # Load VIIRS active fire data for the selected area and day
     active_fire_collection = (
         ee.ImageCollection("NASA/VIIRS/002/VNP14A1")
         .filterBounds(AOI)
         .filterDate(DAY_START, DAY_END)
     )
 
+    # Use the first fire image if data exists; otherwise create an empty image, make sure its not null
     active_fire_img = ee.Image(
     ee.Algorithms.If(
         active_fire_collection.size().gt(0),
@@ -286,12 +319,11 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
     )
 )
 
-    # fire mask (7,8,9 = active fire)
+    # Select active fire pixels only; FireMask values 7, 8, and 9 indicate active fire
     fire_mask = active_fire_img.select("FireMask").gte(7)
-
-    # FRP
+    # Select the fire radiative power band
     frp_img = active_fire_img.select("MaxFRP").updateMask(fire_mask)
-
+    # Get the maximum FRP value inside the area of interest
     frp_max = frp_img.reduceRegion(
         reducer=ee.Reducer.max(),
         geometry=AOI,
@@ -299,49 +331,48 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
         maxPixels=1e9
     ).get("MaxFRP")
 
+    # Replace null FRP values with 0 to avoid calculation errors
     frp_max = safe_number(frp_max, 0)
-
     fire_power = normalize(frp_max, FRP_MAX)
 
     # ---------- FWI spin-up (daily, 14 days before fire day) ----------
     FWI_START = DAY_START.advance(-14, "day")
     FWI_END   = DAY_END
 
+    # Load ERA5-Land weather data
     era_ic = (ee.ImageCollection("ECMWF/ERA5_LAND/HOURLY")
               .filterBounds(AOI)
               .filterDate(FWI_START, FWI_END))
 
-    # Build DAILY weather collection for FWI: bands T/RH/W/R + property month
+    # Build a daily weather image for each day
     def daily_fwi_weather(date):
+        # Convert the input date to an Earth Engine Date object
         date = ee.Date(date)
-
         # daily mean for T, Td, u, v (stable)
         day_mean = era_ic.filterDate(date, date.advance(1, "day")).mean()
-
         T_k  = day_mean.select("temperature_2m")
         Td_k = day_mean.select("dewpoint_temperature_2m")
         RH   = rel_humidity_pct(T_k, Td_k)
-
         u = day_mean.select("u_component_of_wind_10m")
         v = day_mean.select("v_component_of_wind_10m")
         W = wind_speed_kmh(u, v)
 
-        # daily total precip (mm)
+        # Calculate total daily precipitation
         R = (era_ic.select("total_precipitation")
              .filterDate(date, date.advance(1, "day"))
              .sum()
              .multiply(1000))
-
+        # Create one daily weather image containing the required FWI inputs
         out = (to_celsius(T_k).rename("T")
                .addBands(RH.rename("RH"))
                .addBands(W.rename("W"))
                .addBands(R.rename("R")))
-
+        # Add date metadata to the image so it can be sorted and filtered later
         return out.set({
             "system:time_start": date.millis(),
             "month": date.get("month")  # 1..12
         })
-
+    # Create a list of dates from FWI_START to FWI_END
     n_days = ee.Number(FWI_END.difference(FWI_START, "day")).toInt()
     dates = ee.List.sequence(0, n_days.subtract(1)).map(
         lambda d: ee.Date(FWI_START).advance(ee.Number(d), "day")
@@ -349,13 +380,15 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
     daily = ee.ImageCollection(dates.map(daily_fwi_weather))
 
     # ---- Iterate FWI over DAILY collection ----
+    # Initial values
     FFMC0 = ee.Image.constant(85)
     DMC0  = ee.Image.constant(6)
     DC0   = ee.Image.constant(15)
 
     def step(img, state):
+        # Convert the current state to an Earth Engine dictionary
         state = ee.Dictionary(state)
-
+        # Get the previous day's FWI component values
         ffmc_prev = ee.Image(state.get("ffmc"))
         dmc_prev  = ee.Image(state.get("dmc"))
         dc_prev   = ee.Image(state.get("dc"))
@@ -369,13 +402,13 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
         ffmc_today = ffmc_next(ffmc_prev, T, RH, W, R)
         isi_today  = isi_from_ffmc_wind(ffmc_today, W)
 
-        month_num = ee.Number(img.get("month"))
-        dmc_today = dmc_next(dmc_prev, T, RH, R, month_num)
+        date = ee.Date(img.get("system:time_start"))
+        dmc_today = dmc_next(dmc_prev, T, RH, R, lat, date)
         dc_today  = dc_next(dc_prev, T, R)
 
         bui_today = bui_from_dmc_dc(dmc_today, dc_today)
         fwi_today = fwi_from_isi_bui(isi_today, bui_today)
-
+        # Add the calculated FWI components to the image
         out = (img
                .addBands(ffmc_today.rename("FFMC"))
                .addBands(dmc_today.rename("DMC"))
@@ -383,15 +416,19 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
                .addBands(bui_today.rename("BUI"))
                .addBands(isi_today.rename("ISI"))
                .addBands(fwi_today.rename("FWI")))
-
+        # Add the updated daily image to the output collection
         col = ee.ImageCollection(state.get("col")).merge(ee.ImageCollection([out]))
         return ee.Dictionary({"ffmc": ffmc_today, "dmc": dmc_today, "dc": dc_today, "col": col})
 
+    # Create the initial state for the FWI iteration
     init = ee.Dictionary({"ffmc": FFMC0, "dmc": DMC0, "dc": DC0, "col": ee.ImageCollection([])})
+    # Apply the step function day by day over the daily weather collection
     result_iter = ee.Dictionary(daily.sort("system:time_start").iterate(step, init))
+    # Extract the collection that contains the calculated daily FWI values
     fwi_daily = ee.ImageCollection(result_iter.get("col"))
 
     day_img = ee.Image(fwi_daily.filterDate(DAY_START, DAY_END).first())
+    # If no image is found for that day, use a default image with zero values
     day_img = ee.Image(ee.Algorithms.If(
         day_img,
         day_img,
@@ -401,7 +438,9 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
     fwi_day_img = day_img.select("FWI")
 
     # ---- Slope modifier
+    # Load the Digital Elevation Model (DEM) data
     dem = ee.Image("USGS/SRTMGL1_003")
+    # Calculate the slope degree from the elevation data
     slope = ee.Terrain.slope(dem)
     slope_factor = slope.divide(45).clamp(0, 1).multiply(0.3).add(1.0)
 
@@ -416,14 +455,7 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
         .mean()
     )
 
-    pop_mean = population.reduceRegion(
-        reducer=ee.Reducer.mean(),
-        geometry=AOI,
-        scale=100,
-        maxPixels=1e9
-    ).values().get(0)
-
-    pop_mean = safe_number(pop_mean, 0)
+    pop_mean = mean_in_aoi(population, AOI, 100)
     exposure = normalize(pop_mean, POP_MAX)
 
     # Threat Score
@@ -437,7 +469,7 @@ def compute_fire_threat(lat: float, lon: float, when_iso: str, w_fire: float, w_
         ee.Algorithms.If(threat_score.lt(0.66), "متوسطة", "عالية")
     )
 
-    # Output (JSON-ready)
+    # Output
     result = {
         "threat_score": threat_score.getInfo(),
         "threat_level": threat_level.getInfo(),
