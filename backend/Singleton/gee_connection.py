@@ -23,5 +23,3 @@ class GEEConnection:
         ee.Initialize(project=PROJECT_ID)
         print(f" GEE initialized with project: {PROJECT_ID}")
 
-    def get_ee(self):
-        return ee

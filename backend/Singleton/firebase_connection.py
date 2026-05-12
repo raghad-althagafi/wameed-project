@@ -21,11 +21,9 @@ class FirebaseConnection:
     @staticmethod
     def get_db():
         if FirebaseConnection._db is None:
-            cred = credentials.Certificate("firebase_key.json")
-
-            if not firebase_admin._apps:
-                firebase_admin.initialize_app(cred)
-
+            # Initialize Firebase first
+            FirebaseConnection.initialize()
+            # Create Firestore database client
             FirebaseConnection._db = firestore.client()
 
         return FirebaseConnection._db
