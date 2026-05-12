@@ -487,7 +487,7 @@
                 const todayContainer = document.getElementById('todayDetections');
                 const previousContainer = document.getElementById('previousDetections');
                 todayContainer.innerHTML = `<div class="detection-date">تعذر تحميل الرصد</div>`;
-                previousContainer.innerHTML = ``;
+                previousContainer.innerHTML = `<div class="detection-date">تعذر تحميل الرصد</div>`;
                 console.error(err); //print the error
             }
         }
