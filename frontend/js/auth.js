@@ -96,7 +96,7 @@ export async function signinWithEmail(email, password) {
 
     // send user data to backend
     const res = await fetch(`${API_BASE}/api/auth/me`, {
-        method: "GET", // use POST to send new user data
+        method: "GET", // get current user profile from backend
         headers: {
             "Authorization": `Bearer ${idToken}` // send Firebase token for authentication
         }
@@ -148,7 +148,6 @@ export async function getAuthToken(forceRefresh = false) {
 export async function logoutUser() {
     await signOut(auth); // sign out from Firebase
     clearCurrentUser();
-    // localStorage.removeItem("currentUser"); // remove saved user data from local storage
 }
 
 // function to send reset password email

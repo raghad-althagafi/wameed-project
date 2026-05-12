@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import ee
 import traceback
 from auth_utils import login_required
+import math
 
 fire_detection_bp = Blueprint("fire_detection", __name__) # blueprint for the fire detection routes
 
@@ -25,7 +26,7 @@ WINDOW_HOURS = 48
 PERSISTENCE_DAYS = 7
 
 # confidence of the firemask
-FIREMASK_THRESHOLD = 5
+FIREMASK_THRESHOLD = 7
 
 # NDVI thresholds used as a vegetation confidence rule
 NDVI_LOW_THRESHOLD = 0.08
@@ -150,26 +151,25 @@ def _get_gfs_weather(aoi, when_iso):
         ee.ImageCollection("ECMWF/ERA5_LAND/HOURLY")
         .filterDate(when.advance(-2, "hour"), when.advance(2, "hour"))
         .filterBounds(weather_region)
+        .select(["temperature_2m", "dewpoint_temperature_2m"])
     )
-    print(">>> about to check ERA size")
-    print(">>> ERA size:", era.size().getInfo())
+    era_size = era.size().getInfo()
+    print(">>> ERA size:", era_size)
 
-    fallback = ee.Image.constant([273.15, 0]).rename([
-        "temperature_2m",
-        "relative_humidity"
-    ])
+    if era_size == 0:
+        print(">>> No ERA5 weather image found for this time/location")
+        return {
+            "temperature": None,
+            "humidity": None
+        }
 
     def add_time_diff(img):
         diff = ee.Number(img.get("system:time_start")).subtract(when.millis()).abs()
         return img.set("time_diff", diff)
 
     img = ee.Image(
-        ee.Algorithms.If(
-            era.size().gt(0),
-            era.map(add_time_diff).sort("time_diff").first(),
-            fallback
+            era.map(add_time_diff).sort("time_diff").first()
         )
-    )
 
     vals = img.reduceRegion(
         reducer=ee.Reducer.mean(),
@@ -181,9 +181,8 @@ def _get_gfs_weather(aoi, when_iso):
 
     print(">>> WEATHER VALUES:", vals)
 
+    # ERA5 temperature values are in Kelvin
     temp_k = _safe_float(vals.get("temperature_2m"), None)
-
-    # temp_k = _safe_float(vals.get("temperature_2m"), 273.15)
     dew_k = _safe_float(vals.get("dewpoint_temperature_2m"), None)
     
     # If weather values are missing, return None instead of fake 0/100
@@ -198,7 +197,6 @@ def _get_gfs_weather(aoi, when_iso):
     dew_c = dew_k - 273.15
 
     # Magnus formula
-    import math
     es = 6.112 * math.exp((17.67 * temp_c) / (temp_c + 243.5))
     e = 6.112 * math.exp((17.67 * dew_c) / (dew_c + 243.5))
     rh = max(0, min(100, (e / es) * 100 if es else 0))

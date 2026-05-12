@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, g
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import traceback
 import ee
@@ -7,7 +7,6 @@ import joblib
 import pandas as pd
 from auth_utils import login_required
 import requests
-from datetime import datetime, timezone, timedelta
 
 # import shared helper functions from FireDetection
 from FireDetection import (
@@ -29,8 +28,8 @@ SCALE_M = 1000 # same spatial resolution used in the training file
 
 # threshold of the fire 
 NDVI_SCOPE_THRESHOLD = 0.15 # vegetation area
-RISK_MEDIUM_THRESHOLD = 0.40 # medium fire risk
-RISK_HIGH_THRESHOLD = 0.60 # high fire risk
+RISK_MEDIUM_THRESHOLD = 0.50 # medium fire risk
+RISK_HIGH_THRESHOLD = 0.80 # high fire risk
 
 # folder that contains this file
 BASE_DIR = Path(__file__).resolve().parent
@@ -139,13 +138,15 @@ def _get_lulc_class(point_geom):
 
 
 def _get_ndvi_mean(point_geom, end_dt):
-    # use recent 32 days to get NDVI
-    start_dt = end_dt.advance(-32, "day")
+    # use a longer window because MODIS NDVI can be delayed or masked
+    start_dt = end_dt.advance(-96, "day")
 
-    # load MODIS NDVI collection
+    # use buffer around selected point instead of exact point only
+    region_geom = point_geom.buffer(1500)
+
     ndvi_col = (
-        ee.ImageCollection("MODIS/061/MOD13A1")
-        .filterBounds(point_geom)
+        ee.ImageCollection("MODIS/061/MOD13Q1")  # use same source as training if training used MOD13Q1
+        .filterBounds(region_geom)
         .filterDate(start_dt, end_dt)
         .select("NDVI")
     )
@@ -162,8 +163,8 @@ def _get_ndvi_mean(point_geom, end_dt):
     # take NDVI value at the selected point
     ndvi_value = _safe_number(
         ndvi_img.reduceRegion(
-            reducer=ee.Reducer.first(),
-            geometry=point_geom,
+            reducer=ee.Reducer.mean(),
+            geometry=region_geom,
             scale=SCALE_M,
             bestEffort=True,
             maxPixels=1e8
@@ -171,7 +172,10 @@ def _get_ndvi_mean(point_geom, end_dt):
         -9999
     ).getInfo()
 
-    return round(float(ndvi_value or -9999), 3)
+    if ndvi_value is None:
+        return -9999
+
+    return round(float(ndvi_value), 3)
 
 
 def _get_ndwi_mean(point_geom, end_dt):
@@ -494,15 +498,4 @@ def fire_prediction_route(): # function that analyze fire prediction
             "ok": False,
             "error": "internal_server_error",
             "message": str(e)
-        }), 500
-
-    except Exception:
-        tb = traceback.format_exc()
-        print(f">>> ERROR in /fire-prediction for user {user_id}:\n{tb}")
-
-        return jsonify({
-            "ok": False,
-            "error": "internal_server_error",
-            "message": "An internal error occurred during fire prediction.",
-            "details": tb
         }), 500
