@@ -11,7 +11,6 @@ class TestFirebaseConnection(unittest.TestCase):
     @patch("Singleton.firebase_connection.firebase_admin.initialize_app")
     @patch("Singleton.firebase_connection.credentials.Certificate")
     @patch("Singleton.firebase_connection.firebase_admin._apps", new=[])
-
     # Test that Firebase initializes correctly when not already initialized
     def test_initialize_runs_once(self, mock_cred, mock_init):
         FirebaseConnection.initialize()
@@ -20,32 +19,28 @@ class TestFirebaseConnection(unittest.TestCase):
         mock_init.assert_called_once()
 
     @patch("Singleton.firebase_connection.firestore.client")
-    @patch("Singleton.firebase_connection.firebase_admin.initialize_app")
-    @patch("Singleton.firebase_connection.credentials.Certificate")
-    @patch("Singleton.firebase_connection.firebase_admin._apps", new=[])
-
+    @patch("Singleton.firebase_connection.FirebaseConnection.initialize")
     # Test that get_db returns a database instance
-    def test_get_db_returns_instance(self, mock_cred, mock_init, mock_client):
+    def test_get_db_returns_instance(self, mock_initialize, mock_client):
         mock_client.return_value = "mock_db"
 
         db = FirebaseConnection.get_db()
 
         self.assertEqual(db, "mock_db")
+        mock_initialize.assert_called_once()
         mock_client.assert_called_once()
 
     @patch("Singleton.firebase_connection.firestore.client")
-    @patch("Singleton.firebase_connection.credentials.Certificate")
-    @patch("Singleton.firebase_connection.firebase_admin.initialize_app")
-    @patch("Singleton.firebase_connection.firebase_admin._apps", new=[])
-    
+    @patch("Singleton.firebase_connection.FirebaseConnection.initialize")
     # Test that database connection is reused (not created twice)
-    def test_get_db_cached(self, mock_init, mock_cred, mock_client):
+    def test_get_db_cached(self, mock_initialize, mock_client):
         mock_client.return_value = "mock_db"
 
         db1 = FirebaseConnection.get_db()
         db2 = FirebaseConnection.get_db()
 
         self.assertEqual(db1, db2)
+        mock_initialize.assert_called_once()
         mock_client.assert_called_once()
 
 
