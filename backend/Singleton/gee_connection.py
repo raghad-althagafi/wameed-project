@@ -18,8 +18,12 @@ class GEEConnection:
         return GEEConnection.__instance
 
     def _initialize(self):
-        
-        print(" Initializing GEE (should happen once)")
-        ee.Initialize(project=PROJECT_ID)
-        print(f" GEE initialized with project: {PROJECT_ID}")
+        try:
+            print("Initializing GEE (should happen once)")
+            ee.Initialize(project=PROJECT_ID)
+            print(f"GEE initialized with project: {PROJECT_ID}")
+
+        except Exception as e:
+            print(f"GEE initialization failed: {e}")
+            raise
 
